@@ -36,13 +36,10 @@ async def test_current_history_forecast_and_co_conversion():
 async def test_invalid_concentrations_rejected(value):
     payload = model_payload()
     payload["hourly"]["pm2_5"][72] = value
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(
-            lambda r: httpx.Response(200, json=payload)
-            if value == value
-            else httpx.Response(200, text="{}")
-        )
-    ) as client:
+    response = (
+        httpx.Response(200, json=payload) if value == value else httpx.Response(200, text="{}")
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: response)) as client:
         with pytest.raises(ValueError):
             await OpenMeteoProvider(client).get_latest_readings(28.61, 77.21)
 
