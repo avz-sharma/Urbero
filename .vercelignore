@@ -1,0 +1,16 @@
+.env
+.env.*
+.vercel/
+.venv*/
+node_modules/
+__pycache__/
+.coverage*
+.hypothesis/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+frontend/dist/
+validation/
+/task_plan.md
+/findings.md
+/progress.md

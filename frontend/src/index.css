@@ -1,0 +1,153 @@
+@import "tailwindcss";
+
+/* Bind Tailwind v4 dark: utilities to the .dark class on <html> */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --color-canvas: var(--bg-canvas);
+  --color-surface: var(--bg-surface);
+  --color-elevated: var(--bg-elevated);
+  --color-subtle: var(--border-subtle);
+
+  --color-text-main: var(--text-primary);
+  --color-text-muted: var(--text-secondary);
+
+  --color-teal-brand: var(--accent-primary);
+  --color-teal-hover: var(--accent-hover);
+  --color-teal-soft: var(--accent-soft);
+  --color-teal-ink: var(--accent-ink);
+}
+
+:root {
+  --foreground: #0f766e;
+
+  /* Surfaces */
+  --bg-canvas: #F6F8F7;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #EDF2F0;
+  --border-subtle: #DCE4E1;
+
+  /* Typography */
+  --text-primary: #0F1B1D;
+  --text-secondary: #475A5E;
+  --wordmark-green: #132a13;
+  --wordmark-mid: #31572c;
+  --wordmark-highlight: #4f772d;
+
+  /* Brand Accent (Clean Air Teal) */
+  --accent-primary: #0F766E;
+  --accent-hover: #115E59;
+  --accent-soft: #CCFBF1;
+  --accent-ink: #115E59;
+}
+
+.dark {
+  --foreground: #2dd4bf;
+
+  /* Surfaces */
+  --bg-canvas: #0B1114;
+  --bg-surface: #121B20;
+  --bg-elevated: #19252C;
+  --border-subtle: #24343D;
+
+  /* Typography */
+  --text-primary: #F0F5F4;
+  --text-secondary: #9BB0B5;
+  --wordmark-green: #90a955;
+  --wordmark-mid: color-mix(in srgb, #90a955, #ecf39e);
+  --wordmark-highlight: #ecf39e;
+
+  /* Brand Accent (Clean Air Teal) */
+  --accent-primary: #2DD4BF;
+  --accent-hover: #5EEAD4;
+  --accent-soft: #0F2E2B;
+  --accent-ink: #5EEAD4;
+}
+
+.urbero-wordmark {
+  display: inline-block;
+  color: var(--wordmark-green);
+}
+
+@supports (background-clip: text) {
+  @media (forced-colors: none) {
+    .urbero-wordmark {
+      background-image: linear-gradient(
+        90deg,
+        var(--wordmark-green),
+        var(--wordmark-mid),
+        var(--wordmark-highlight),
+        var(--wordmark-mid),
+        var(--wordmark-green)
+      );
+      background-size: 200% 100%;
+      background-clip: text;
+      color: transparent;
+      animation: wordmark-sweep 5s ease-in-out infinite alternate;
+    }
+  }
+}
+
+@keyframes wordmark-sweep {
+  from { background-position: 0% 50%; }
+  to { background-position: 100% 50%; }
+}
+
+/* Landing ripple and button animations */
+@theme inline {
+  --animate-ripple: ripple var(--duration, 3.4s) ease calc(var(--i, 0) * 0.2s) infinite;
+  --animate-pulse: pulse var(--duration, 1.5s) cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-pulse-ripple: pulse-ripple var(--duration, 1.5s) cubic-bezier(0, 0, 0.2, 1) infinite;
+
+  @keyframes ripple {
+    0%,
+    100% {
+      transform: translate(-50%, -50%) scale(1);
+    }
+    50% {
+      transform: translate(-50%, -50%) scale(0.92);
+    }
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  @keyframes pulse-ripple {
+    0% {
+      transform: scale(1);
+      opacity: 0.8;
+      box-shadow: 0 0 0 0 var(--pulse-color, var(--bg, currentColor));
+    }
+    100% {
+      transform: scale(calc(1 + (var(--distance, 8px) / 20px)));
+      opacity: 0;
+      box-shadow: 0 0 0 var(--distance, 8px) var(--pulse-color, var(--bg, currentColor));
+    }
+  }
+}
+
+body {
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  margin: 0;
+  min-height: 100vh;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

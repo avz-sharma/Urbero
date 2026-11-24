@@ -1,0 +1,2294 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Urbero Air Quality Assistant API",
+    "description": "Production GenAI assistant for Indian cities with deterministic calculation core.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/locations/search": {
+      "get": {
+        "tags": [
+          "locations"
+        ],
+        "summary": "Search Locations Endpoint",
+        "description": "Search Indian cities and localities with 24-hour caching.",
+        "operationId": "search_locations_endpoint_api_locations_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 100,
+              "description": "Search string for Indian city, locality, or sector",
+              "title": "Q"
+            },
+            "description": "Search string for Indian city, locality, or sector"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocationSearchResult"
+                  },
+                  "title": "Response Search Locations Endpoint Api Locations Search Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/locations/reverse": {
+      "get": {
+        "tags": [
+          "locations"
+        ],
+        "summary": "Reverse Geocode Endpoint",
+        "description": "Reverse geocode GPS coordinates with 2-decimal privacy snapping and 24-hour caching.",
+        "operationId": "reverse_geocode_endpoint_api_locations_reverse_get",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 90.0,
+              "minimum": -90.0,
+              "description": "Latitude [-90, 90]",
+              "title": "Lat"
+            },
+            "description": "Latitude [-90, 90]"
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 180.0,
+              "minimum": -180.0,
+              "description": "Longitude [-180, 180]",
+              "title": "Lon"
+            },
+            "description": "Longitude [-180, 180]"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReverseGeocodeResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Health check endpoint for Cloud Run container probes.",
+        "operationId": "health_check_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health Check Api Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stations/nearest": {
+      "get": {
+        "summary": "Get Nearest Station Readings",
+        "description": "Fetch nearest station readings, calculate CPCB AQI, and score data confidence.",
+        "operationId": "get_nearest_station_readings_api_stations_nearest_get",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 90.0,
+              "minimum": -90.0,
+              "description": "Latitude",
+              "title": "Lat"
+            },
+            "description": "Latitude"
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 180.0,
+              "minimum": -180.0,
+              "description": "Longitude",
+              "title": "Lon"
+            },
+            "description": "Longitude"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Nearest Station Readings Api Stations Nearest Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/aqi/calculate": {
+      "post": {
+        "summary": "Calculate Aqi Endpoint",
+        "description": "Calculate CPCB AQI from a dictionary of pollutant concentrations.",
+        "operationId": "calculate_aqi_endpoint_api_aqi_calculate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object",
+                "title": "Readings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CPCBAQIResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exposure/dose": {
+      "post": {
+        "summary": "Calculate Dose Endpoint",
+        "description": "Calculate personal inhaled PM2.5 dose and cigarette equivalence.",
+        "operationId": "calculate_dose_endpoint_api_exposure_dose_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DoseCalculationInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoseCalculationResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exposure/cadr": {
+      "post": {
+        "summary": "Calculate Cadr Endpoint",
+        "description": "Calculate room purifier CADR requirement and indoor sealing actions.",
+        "operationId": "calculate_cadr_endpoint_api_exposure_cadr_post",
+        "parameters": [
+          {
+            "name": "target_ach",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 20,
+              "exclusiveMinimum": 0,
+              "default": 5.0,
+              "title": "Target Ach"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_calculate_cadr_endpoint_api_exposure_cadr_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomCADRResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exposure/commute": {
+      "post": {
+        "summary": "Compare Commute Endpoint",
+        "description": "Compare commute modes on personal inhaled PM2.5 and tailpipe CO2.",
+        "operationId": "compare_commute_endpoint_api_exposure_commute_post",
+        "parameters": [
+          {
+            "name": "distance_km",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "title": "Distance Km"
+            }
+          },
+          {
+            "name": "ambient_pm25",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "title": "Ambient Pm25"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CommuteModeComparison"
+                  },
+                  "title": "Response Compare Commute Endpoint Api Exposure Commute Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exposure/commute/advice": {
+      "post": {
+        "summary": "Advise Commute",
+        "operationId": "advise_commute_api_exposure_commute_advice_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TravelAdviceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TravelAdviceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exposure/errands": {
+      "post": {
+        "summary": "Optimize Errands Endpoint",
+        "description": "Optimize multi-stop local trips into a consolidated loop.",
+        "operationId": "optimize_errands_endpoint_api_exposure_errands_post",
+        "parameters": [
+          {
+            "name": "peak_pm25",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 2000,
+              "minimum": 0,
+              "title": "Peak Pm25"
+            }
+          },
+          {
+            "name": "window_pm25",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 2000,
+              "minimum": 0,
+              "title": "Window Pm25"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ErrandStop"
+                },
+                "title": "Stops"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MergedErrandsResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/plan": {
+      "post": {
+        "summary": "Generate Daily Plan",
+        "description": "End-to-end personalized daily plan: deterministic calculations with GenAI edge narrative.",
+        "operationId": "generate_daily_plan_api_plan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DailyPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyPlanResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/plan/daily": {
+      "post": {
+        "summary": "Generate Daily Plan",
+        "description": "End-to-end personalized daily plan: deterministic calculations with GenAI edge narrative.",
+        "operationId": "generate_daily_plan_api_plan_daily_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DailyPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyPlanResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/planner/vision": {
+      "post": {
+        "summary": "Analyze Room Photo Endpoint",
+        "description": "Analyze a room photograph to pre-fill CADR form fields with confidence scores.",
+        "operationId": "analyze_room_photo_endpoint_api_planner_vision_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_analyze_room_photo_endpoint_api_planner_vision_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomVisionExtraction"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/forecast/modelled": {
+      "get": {
+        "summary": "Get Modelled Forecast",
+        "description": "Fetch hourly modelled air quality forecast (Open-Meteo CAMS simulation).",
+        "operationId": "get_modelled_forecast_api_forecast_modelled_get",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 90.0,
+              "minimum": -90.0,
+              "description": "Latitude",
+              "title": "Lat"
+            },
+            "description": "Latitude"
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 180.0,
+              "minimum": -180.0,
+              "description": "Longitude",
+              "title": "Lon"
+            },
+            "description": "Longitude"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelledForecastResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_analyze_room_photo_endpoint_api_planner_vision_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "Room photograph to prefill CADR parameters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_analyze_room_photo_endpoint_api_planner_vision_post"
+      },
+      "Body_calculate_cadr_endpoint_api_exposure_cadr_post": {
+        "properties": {
+          "dimensions": {
+            "$ref": "#/components/schemas/RoomDimensions"
+          },
+          "factors": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoomIndoorFactors"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "dimensions"
+        ],
+        "title": "Body_calculate_cadr_endpoint_api_exposure_cadr_post"
+      },
+      "CPCBAQIResult": {
+        "properties": {
+          "overall_aqi": {
+            "type": "integer",
+            "title": "Overall Aqi",
+            "default": 0
+          },
+          "dominant_pollutant": {
+            "type": "string",
+            "title": "Dominant Pollutant",
+            "default": ""
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "default": "Unknown"
+          },
+          "color_code": {
+            "type": "string",
+            "title": "Color Code",
+            "default": "#808080"
+          },
+          "sub_indices": {
+            "items": {
+              "$ref": "#/components/schemas/SubIndexItem"
+            },
+            "type": "array",
+            "title": "Sub Indices"
+          },
+          "is_valid": {
+            "type": "boolean",
+            "title": "Is Valid",
+            "default": false
+          },
+          "validation_message": {
+            "type": "string",
+            "title": "Validation Message",
+            "default": ""
+          },
+          "indicative_aqi": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indicative Aqi"
+          }
+        },
+        "type": "object",
+        "title": "CPCBAQIResult",
+        "description": "Aggregated CPCB AQI result with multi-pollutant compliance status."
+      },
+      "CommunityBrief": {
+        "properties": {
+          "rwa_society_advisory": {
+            "type": "string",
+            "title": "Rwa Society Advisory"
+          },
+          "school_outdoor_activity_recommendation": {
+            "type": "string",
+            "title": "School Outdoor Activity Recommendation"
+          },
+          "mask_and_health_guidance": {
+            "type": "string",
+            "title": "Mask And Health Guidance"
+          },
+          "formatted_brief": {
+            "type": "string",
+            "title": "Formatted Brief"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rwa_society_advisory",
+          "school_outdoor_activity_recommendation",
+          "mask_and_health_guidance",
+          "formatted_brief"
+        ],
+        "title": "CommunityBrief",
+        "description": "Copy-ready community briefing for RWAs and schools."
+      },
+      "CommuteModeComparison": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "distance_km": {
+            "type": "number",
+            "title": "Distance Km"
+          },
+          "duration_minutes": {
+            "type": "number",
+            "title": "Duration Minutes"
+          },
+          "tailpipe_co2_grams": {
+            "type": "number",
+            "title": "Tailpipe Co2 Grams"
+          },
+          "personal_inhaled_pm25_ug": {
+            "type": "number",
+            "title": "Personal Inhaled Pm25 Ug"
+          },
+          "exposure_multiplier": {
+            "type": "number",
+            "title": "Exposure Multiplier"
+          },
+          "planet_vs_lungs_note": {
+            "type": "string",
+            "title": "Planet Vs Lungs Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode",
+          "label",
+          "distance_km",
+          "duration_minutes",
+          "tailpipe_co2_grams",
+          "personal_inhaled_pm25_ug",
+          "exposure_multiplier",
+          "planet_vs_lungs_note"
+        ],
+        "title": "CommuteModeComparison",
+        "description": "Side-by-side personal lung health vs planetary climate impact metrics."
+      },
+      "ConfidenceResult": {
+        "properties": {
+          "level": {
+            "type": "string",
+            "enum": [
+              "High",
+              "Medium",
+              "Low"
+            ],
+            "title": "Level"
+          },
+          "score_percent": {
+            "type": "integer",
+            "title": "Score Percent"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "level",
+          "score_percent",
+          "reason"
+        ],
+        "title": "ConfidenceResult",
+        "description": "Data confidence rating and plain-language justification."
+      },
+      "DailyPlanRequest": {
+        "properties": {
+          "city": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 2,
+            "title": "City",
+            "default": "Delhi"
+          },
+          "latitude": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude"
+          },
+          "household_preset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Household Preset Id"
+          },
+          "room_dimensions": {
+            "$ref": "#/components/schemas/RoomDimensions"
+          },
+          "indoor_factors": {
+            "$ref": "#/components/schemas/RoomIndoorFactors"
+          },
+          "activities": {
+            "items": {
+              "$ref": "#/components/schemas/ScheduledActivity"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Activities"
+          },
+          "commute_distance_km": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Commute Distance Km",
+            "default": 12.0
+          },
+          "errands": {
+            "items": {
+              "$ref": "#/components/schemas/ErrandStop"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "title": "Errands"
+          },
+          "language_preference": {
+            "type": "string",
+            "enum": [
+              "english",
+              "hinglish"
+            ],
+            "title": "Language Preference",
+            "default": "english"
+          },
+          "untrusted_notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Untrusted Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "title": "DailyPlanRequest",
+        "description": "Incoming request for daily plan generation."
+      },
+      "DailyPlanResponse": {
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          },
+          "city": {
+            "type": "string",
+            "title": "City"
+          },
+          "station_metadata": {
+            "$ref": "#/components/schemas/StationMetadataSchema"
+          },
+          "aqi_result": {
+            "$ref": "#/components/schemas/CPCBAQIResult"
+          },
+          "data_confidence": {
+            "$ref": "#/components/schemas/ConfidenceResult"
+          },
+          "smog_episode_active": {
+            "type": "boolean",
+            "title": "Smog Episode Active"
+          },
+          "medical_disclaimer": {
+            "type": "string",
+            "title": "Medical Disclaimer",
+            "default": ""
+          },
+          "routine_optimization": {
+            "$ref": "#/components/schemas/RoutineOptimizationResult"
+          },
+          "commute_comparisons": {
+            "items": {
+              "$ref": "#/components/schemas/CommuteModeComparison"
+            },
+            "type": "array",
+            "title": "Commute Comparisons"
+          },
+          "room_cadr_guidance": {
+            "$ref": "#/components/schemas/RoomCADRResult"
+          },
+          "errand_merger": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MergedErrandsResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "whatsapp_card": {
+            "$ref": "#/components/schemas/WhatsAppFamilyCard"
+          },
+          "community_brief": {
+            "$ref": "#/components/schemas/CommunityBrief"
+          },
+          "recommendation_cards": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendationCard"
+            },
+            "type": "array",
+            "title": "Recommendation Cards"
+          },
+          "diurnal_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiurnalProfileResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history_source": {
+            "type": "string",
+            "title": "History Source",
+            "default": "Unavailable; schedule timing optimization disabled."
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp",
+          "city",
+          "station_metadata",
+          "aqi_result",
+          "data_confidence",
+          "smog_episode_active",
+          "routine_optimization",
+          "commute_comparisons",
+          "room_cadr_guidance",
+          "whatsapp_card",
+          "community_brief"
+        ],
+        "title": "DailyPlanResponse",
+        "description": "Complete personalized response with deterministic math and narrative edge."
+      },
+      "DiurnalHourProfile": {
+        "properties": {
+          "hour": {
+            "type": "integer",
+            "maximum": 23.0,
+            "minimum": 0.0,
+            "title": "Hour"
+          },
+          "avg_pm25": {
+            "type": "number",
+            "title": "Avg Pm25"
+          },
+          "sample_count": {
+            "type": "integer",
+            "title": "Sample Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hour",
+          "avg_pm25",
+          "sample_count"
+        ],
+        "title": "DiurnalHourProfile",
+        "description": "Statistical summary for a single hour of the day (0-23)."
+      },
+      "DiurnalProfileResult": {
+        "properties": {
+          "station_name": {
+            "type": "string",
+            "title": "Station Name"
+          },
+          "hourly_curve": {
+            "items": {
+              "$ref": "#/components/schemas/DiurnalHourProfile"
+            },
+            "type": "array",
+            "title": "Hourly Curve"
+          },
+          "cleanest_window_start": {
+            "type": "integer",
+            "title": "Cleanest Window Start"
+          },
+          "cleanest_window_end": {
+            "type": "integer",
+            "title": "Cleanest Window End"
+          },
+          "cleanest_window_avg_pm25": {
+            "type": "number",
+            "title": "Cleanest Window Avg Pm25"
+          },
+          "peak_smog_hours": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Peak Smog Hours"
+          },
+          "peak_smog_avg_pm25": {
+            "type": "number",
+            "title": "Peak Smog Avg Pm25"
+          },
+          "total_samples": {
+            "type": "integer",
+            "title": "Total Samples"
+          },
+          "summary_advisory": {
+            "type": "string",
+            "title": "Summary Advisory"
+          }
+        },
+        "type": "object",
+        "required": [
+          "station_name",
+          "hourly_curve",
+          "cleanest_window_start",
+          "cleanest_window_end",
+          "cleanest_window_avg_pm25",
+          "peak_smog_hours",
+          "peak_smog_avg_pm25",
+          "total_samples",
+          "summary_advisory"
+        ],
+        "title": "DiurnalProfileResult",
+        "description": "Derived 24-hour empirical diurnal profile and activity timing windows."
+      },
+      "DoseCalculationInput": {
+        "properties": {
+          "pm25_concentration_ug_m3": {
+            "type": "number",
+            "title": "Pm25 Concentration Ug M3"
+          },
+          "duration_minutes": {
+            "type": "number",
+            "title": "Duration Minutes"
+          },
+          "breathing_rate_m3_per_hr": {
+            "type": "number",
+            "title": "Breathing Rate M3 Per Hr"
+          },
+          "infiltration_factor": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Infiltration Factor",
+            "default": 1.0
+          },
+          "purifier_efficiency": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Purifier Efficiency",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "pm25_concentration_ug_m3",
+          "duration_minutes",
+          "breathing_rate_m3_per_hr"
+        ],
+        "title": "DoseCalculationInput",
+        "description": "Input parameters for personal PM2.5 inhaled dose computation."
+      },
+      "DoseCalculationResult": {
+        "properties": {
+          "duration_hours": {
+            "type": "number",
+            "title": "Duration Hours"
+          },
+          "indoor_effective_concentration_ug_m3": {
+            "type": "number",
+            "title": "Indoor Effective Concentration Ug M3"
+          },
+          "inhaled_dose_ug": {
+            "type": "number",
+            "title": "Inhaled Dose Ug"
+          },
+          "cigarette_equivalent": {
+            "type": "number",
+            "title": "Cigarette Equivalent"
+          },
+          "who_24hr_reference_dose_ug": {
+            "type": "number",
+            "title": "Who 24Hr Reference Dose Ug"
+          },
+          "naaqs_24hr_reference_dose_ug": {
+            "type": "number",
+            "title": "Naaqs 24Hr Reference Dose Ug"
+          },
+          "disclaimer_cigarette": {
+            "type": "string",
+            "title": "Disclaimer Cigarette",
+            "default": "The cigarette equivalent metric is based on the Berkeley Earth benchmark (~22 \u00b5g/m\u00b3 over 24 hours \u2248 1 cigarette). This is a public communication heuristic to contextualize particulate exposure, NOT a clinical diagnosis or medical equivalence."
+          },
+          "disclaimer_baselines": {
+            "type": "string",
+            "title": "Disclaimer Baselines",
+            "default": "WHO 2021 (15 \u00b5g/m\u00b3) and India NAAQS (60 \u00b5g/m\u00b3) 24-hour PM2.5 levels are regulatory and scientific reference values, not a personal 'safe pollution budget'."
+          }
+        },
+        "type": "object",
+        "required": [
+          "duration_hours",
+          "indoor_effective_concentration_ug_m3",
+          "inhaled_dose_ug",
+          "cigarette_equivalent",
+          "who_24hr_reference_dose_ug",
+          "naaqs_24hr_reference_dose_ug"
+        ],
+        "title": "DoseCalculationResult",
+        "description": "Computed personal exposure metrics with mandatory transparency disclaimers."
+      },
+      "ErrandStop": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "duration_minutes": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Duration Minutes"
+          },
+          "distance_from_home_km": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Distance From Home Km"
+          },
+          "window_open_hour": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Open Hour"
+          },
+          "window_close_hour": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Close Hour"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "category",
+          "duration_minutes",
+          "distance_from_home_km"
+        ],
+        "title": "ErrandStop",
+        "description": "Destination stop for an errand with spatial and temporal constraints."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LocationSearchResult": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "city": {
+            "type": "string",
+            "title": "City"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "lat": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "city",
+          "state",
+          "lat",
+          "lon"
+        ],
+        "title": "LocationSearchResult",
+        "description": "India-scoped geocoded location search item."
+      },
+      "MathBreakdownSchema": {
+        "properties": {
+          "formula_name": {
+            "type": "string",
+            "title": "Formula Name"
+          },
+          "formula_expression": {
+            "type": "string",
+            "title": "Formula Expression"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Inputs"
+          },
+          "output_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Output Value"
+          },
+          "reference_benchmark": {
+            "type": "string",
+            "title": "Reference Benchmark"
+          },
+          "scientific_citation": {
+            "type": "string",
+            "title": "Scientific Citation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "formula_name",
+          "formula_expression",
+          "inputs",
+          "output_value",
+          "reference_benchmark",
+          "scientific_citation"
+        ],
+        "title": "MathBreakdownSchema",
+        "description": "Show the Math transparency drawer details."
+      },
+      "MergedErrandsResult": {
+        "properties": {
+          "ordered_stops": {
+            "items": {
+              "$ref": "#/components/schemas/ErrandStop"
+            },
+            "type": "array",
+            "title": "Ordered Stops"
+          },
+          "recommended_start_hour": {
+            "type": "number",
+            "title": "Recommended Start Hour"
+          },
+          "recommended_end_hour": {
+            "type": "number",
+            "title": "Recommended End Hour"
+          },
+          "baseline_separate_distance_km": {
+            "type": "number",
+            "title": "Baseline Separate Distance Km"
+          },
+          "merged_loop_distance_km": {
+            "type": "number",
+            "title": "Merged Loop Distance Km"
+          },
+          "distance_saved_km": {
+            "type": "number",
+            "title": "Distance Saved Km"
+          },
+          "travel_mode": {
+            "type": "string",
+            "title": "Travel Mode"
+          },
+          "tailpipe_co2_saved_grams": {
+            "type": "number",
+            "title": "Tailpipe Co2 Saved Grams"
+          },
+          "baseline_inhaled_pm25_ug": {
+            "type": "number",
+            "title": "Baseline Inhaled Pm25 Ug"
+          },
+          "optimized_inhaled_pm25_ug": {
+            "type": "number",
+            "title": "Optimized Inhaled Pm25 Ug"
+          },
+          "pm25_dose_reduction_percent": {
+            "type": "number",
+            "title": "Pm25 Dose Reduction Percent"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ordered_stops",
+          "recommended_start_hour",
+          "recommended_end_hour",
+          "baseline_separate_distance_km",
+          "merged_loop_distance_km",
+          "distance_saved_km",
+          "travel_mode",
+          "tailpipe_co2_saved_grams",
+          "baseline_inhaled_pm25_ug",
+          "optimized_inhaled_pm25_ug",
+          "pm25_dose_reduction_percent",
+          "rationale"
+        ],
+        "title": "MergedErrandsResult",
+        "description": "Optimized consolidated errand loop with quantified environmental and lung benefits."
+      },
+      "ModelledForecastResponse": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "Open-Meteo / Copernicus Atmosphere Monitoring Service (CAMS)"
+          },
+          "is_modelled_forecast": {
+            "type": "boolean",
+            "title": "Is Modelled Forecast",
+            "default": true
+          },
+          "latitude": {
+            "type": "number",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "title": "Longitude"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "hourly_forecasts": {
+            "items": {
+              "$ref": "#/components/schemas/ModelledPollutantHour"
+            },
+            "type": "array",
+            "title": "Hourly Forecasts"
+          },
+          "mandatory_disclaimer": {
+            "type": "string",
+            "title": "Mandatory Disclaimer",
+            "default": "NOTICE: Modelled atmospheric forecasts are mathematical simulations from CAMS / ECMWF. They are NOT ground-truth physical sensor measurements and must be interpreted separately from WAQI/CPCB live station data."
+          }
+        },
+        "type": "object",
+        "required": [
+          "latitude",
+          "longitude",
+          "timezone",
+          "hourly_forecasts"
+        ],
+        "title": "ModelledForecastResponse",
+        "description": "Labelled modelled air quality forecast structurally separated from live sensor data."
+      },
+      "ModelledPollutantHour": {
+        "properties": {
+          "time": {
+            "type": "string",
+            "title": "Time"
+          },
+          "pm25_ug_m3": {
+            "type": "number",
+            "title": "Pm25 Ug M3"
+          },
+          "pm10_ug_m3": {
+            "type": "number",
+            "title": "Pm10 Ug M3"
+          },
+          "no2_ug_m3": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "No2 Ug M3"
+          },
+          "co_ug_m3": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Co Ug M3"
+          }
+        },
+        "type": "object",
+        "required": [
+          "time",
+          "pm25_ug_m3",
+          "pm10_ug_m3"
+        ],
+        "title": "ModelledPollutantHour",
+        "description": "Hourly modelled air quality prediction from atmospheric simulation."
+      },
+      "OptimizedActivity": {
+        "properties": {
+          "activity_id": {
+            "type": "string",
+            "title": "Activity Id"
+          },
+          "activity_name": {
+            "type": "string",
+            "title": "Activity Name"
+          },
+          "member_name": {
+            "type": "string",
+            "title": "Member Name"
+          },
+          "original_start_hour": {
+            "type": "number",
+            "title": "Original Start Hour"
+          },
+          "original_end_hour": {
+            "type": "number",
+            "title": "Original End Hour"
+          },
+          "optimized_start_hour": {
+            "type": "number",
+            "title": "Optimized Start Hour"
+          },
+          "optimized_end_hour": {
+            "type": "number",
+            "title": "Optimized End Hour"
+          },
+          "is_shifted": {
+            "type": "boolean",
+            "title": "Is Shifted"
+          },
+          "is_shifted_indoors": {
+            "type": "boolean",
+            "title": "Is Shifted Indoors"
+          },
+          "baseline_inhaled_pm25_ug": {
+            "type": "number",
+            "title": "Baseline Inhaled Pm25 Ug"
+          },
+          "optimized_inhaled_pm25_ug": {
+            "type": "number",
+            "title": "Optimized Inhaled Pm25 Ug"
+          },
+          "dose_reduction_ug": {
+            "type": "number",
+            "title": "Dose Reduction Ug"
+          },
+          "recommendation_note": {
+            "type": "string",
+            "title": "Recommendation Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "activity_id",
+          "activity_name",
+          "member_name",
+          "original_start_hour",
+          "original_end_hour",
+          "optimized_start_hour",
+          "optimized_end_hour",
+          "is_shifted",
+          "is_shifted_indoors",
+          "baseline_inhaled_pm25_ug",
+          "optimized_inhaled_pm25_ug",
+          "dose_reduction_ug",
+          "recommendation_note"
+        ],
+        "title": "OptimizedActivity",
+        "description": "Adjusted activity schedule with before/after inhaled PM2.5 exposure."
+      },
+      "RecommendationCard": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "pillar": {
+            "type": "string",
+            "enum": [
+              "routine",
+              "indoor",
+              "impact"
+            ],
+            "title": "Pillar"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "why": {
+            "type": "string",
+            "minLength": 10,
+            "title": "Why"
+          },
+          "quantified_impact": {
+            "type": "string",
+            "minLength": 10,
+            "title": "Quantified Impact"
+          },
+          "math_breakdown": {
+            "$ref": "#/components/schemas/MathBreakdownSchema"
+          },
+          "station_metadata": {
+            "$ref": "#/components/schemas/StationMetadataSchema"
+          },
+          "data_confidence": {
+            "type": "string",
+            "enum": [
+              "High",
+              "Medium",
+              "Low"
+            ],
+            "title": "Data Confidence"
+          },
+          "confidence_reason": {
+            "type": "string",
+            "title": "Confidence Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "pillar",
+          "title",
+          "why",
+          "quantified_impact",
+          "math_breakdown",
+          "station_metadata",
+          "data_confidence",
+          "confidence_reason"
+        ],
+        "title": "RecommendationCard",
+        "description": "Transparent actionable recommendation card required by AGENTS.md."
+      },
+      "ReverseGeocodeResult": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "city": {
+            "type": "string",
+            "title": "City"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "city",
+          "state"
+        ],
+        "title": "ReverseGeocodeResult",
+        "description": "Reverse geocoding result with administrative labels."
+      },
+      "RoomCADRResult": {
+        "properties": {
+          "room_volume_m3": {
+            "type": "number",
+            "title": "Room Volume M3"
+          },
+          "target_ach": {
+            "type": "number",
+            "title": "Target Ach"
+          },
+          "required_cadr_m3_per_hr": {
+            "type": "number",
+            "title": "Required Cadr M3 Per Hr"
+          },
+          "required_cadr_cfm": {
+            "type": "number",
+            "title": "Required Cadr Cfm"
+          },
+          "sealing_and_source_guidance": {
+            "type": "string",
+            "title": "Sealing And Source Guidance"
+          },
+          "ventilation_recommendation": {
+            "type": "string",
+            "title": "Ventilation Recommendation"
+          },
+          "plants_footnote": {
+            "type": "string",
+            "title": "Plants Footnote",
+            "default": "Indoor plants (such as Areca Palm, Snake Plant, Peace Lily) provide psychological benefits and marginal VOC absorption under static laboratory conditions. For real-world PM2.5 particulate reduction, mechanical HEPA air purifiers, gap sealing, and timed ventilation are the primary effective measures."
+          }
+        },
+        "type": "object",
+        "required": [
+          "room_volume_m3",
+          "target_ach",
+          "required_cadr_m3_per_hr",
+          "required_cadr_cfm",
+          "sealing_and_source_guidance",
+          "ventilation_recommendation"
+        ],
+        "title": "RoomCADRResult",
+        "description": "Recommended purifier sizing and indoor air quality actions."
+      },
+      "RoomDimensions": {
+        "properties": {
+          "length_m": {
+            "type": "number",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Length M"
+          },
+          "width_m": {
+            "type": "number",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Width M"
+          },
+          "height_m": {
+            "type": "number",
+            "maximum": 30.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Height M",
+            "default": 2.8
+          }
+        },
+        "type": "object",
+        "required": [
+          "length_m",
+          "width_m"
+        ],
+        "title": "RoomDimensions",
+        "description": "Room physical dimensions in meters."
+      },
+      "RoomIndoorFactors": {
+        "properties": {
+          "has_kitchen_chimney": {
+            "type": "boolean",
+            "title": "Has Kitchen Chimney",
+            "default": true
+          },
+          "burns_incense_agarbatti": {
+            "type": "boolean",
+            "title": "Burns Incense Agarbatti",
+            "default": false
+          },
+          "has_unsealed_balcony": {
+            "type": "boolean",
+            "title": "Has Unsealed Balcony",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "RoomIndoorFactors",
+        "description": "Indoor source activities and building envelope leakage factors."
+      },
+      "RoomVisionExtraction": {
+        "properties": {
+          "is_valid_room": {
+            "type": "boolean",
+            "title": "Is Valid Room"
+          },
+          "rejection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Reason"
+          },
+          "estimated_length_m": {
+            "type": "number",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Estimated Length M",
+            "default": 5.0
+          },
+          "estimated_width_m": {
+            "type": "number",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Estimated Width M",
+            "default": 4.0
+          },
+          "estimated_height_m": {
+            "type": "number",
+            "maximum": 6.0,
+            "minimum": 1.5,
+            "title": "Estimated Height M",
+            "default": 2.8
+          },
+          "has_kitchen_chimney": {
+            "type": "boolean",
+            "title": "Has Kitchen Chimney",
+            "default": false
+          },
+          "burns_incense_agarbatti": {
+            "type": "boolean",
+            "title": "Burns Incense Agarbatti",
+            "default": false
+          },
+          "has_unsealed_balcony": {
+            "type": "boolean",
+            "title": "Has Unsealed Balcony",
+            "default": false
+          },
+          "confidence_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence Score",
+            "default": 0.8
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_valid_room",
+          "explanation"
+        ],
+        "title": "RoomVisionExtraction",
+        "description": "Structured extraction from a room photograph for CADR form pre-fill."
+      },
+      "RoutineOptimizationResult": {
+        "properties": {
+          "activities": {
+            "items": {
+              "$ref": "#/components/schemas/OptimizedActivity"
+            },
+            "type": "array",
+            "title": "Activities"
+          },
+          "total_baseline_dose_ug": {
+            "type": "number",
+            "title": "Total Baseline Dose Ug"
+          },
+          "total_optimized_dose_ug": {
+            "type": "number",
+            "title": "Total Optimized Dose Ug"
+          },
+          "total_dose_reduction_ug": {
+            "type": "number",
+            "title": "Total Dose Reduction Ug"
+          },
+          "total_dose_reduction_percent": {
+            "type": "number",
+            "title": "Total Dose Reduction Percent"
+          },
+          "smog_episode_active": {
+            "type": "boolean",
+            "title": "Smog Episode Active"
+          },
+          "smog_episode_advisory": {
+            "type": "string",
+            "title": "Smog Episode Advisory"
+          },
+          "clean_air_day": {
+            "type": "boolean",
+            "title": "Clean Air Day"
+          },
+          "overall_advisory": {
+            "type": "string",
+            "title": "Overall Advisory"
+          }
+        },
+        "type": "object",
+        "required": [
+          "activities",
+          "total_baseline_dose_ug",
+          "total_optimized_dose_ug",
+          "total_dose_reduction_ug",
+          "total_dose_reduction_percent",
+          "smog_episode_active",
+          "smog_episode_advisory",
+          "clean_air_day",
+          "overall_advisory"
+        ],
+        "title": "RoutineOptimizationResult",
+        "description": "Complete household schedule re-optimization summary and episode advisory."
+      },
+      "ScheduledActivity": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "member_name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Member Name"
+          },
+          "age_group": {
+            "type": "string",
+            "enum": [
+              "adult",
+              "child",
+              "senior"
+            ],
+            "title": "Age Group",
+            "default": "adult"
+          },
+          "intensity": {
+            "type": "string",
+            "enum": [
+              "resting",
+              "sedentary",
+              "light",
+              "moderate",
+              "heavy"
+            ],
+            "title": "Intensity",
+            "default": "moderate"
+          },
+          "scheduled_start_hour": {
+            "type": "number",
+            "maximum": 24.0,
+            "minimum": 0.0,
+            "title": "Scheduled Start Hour"
+          },
+          "scheduled_end_hour": {
+            "type": "number",
+            "maximum": 24.0,
+            "minimum": 0.0,
+            "title": "Scheduled End Hour"
+          },
+          "is_outdoor": {
+            "type": "boolean",
+            "title": "Is Outdoor",
+            "default": true
+          },
+          "is_flexible": {
+            "type": "boolean",
+            "title": "Is Flexible",
+            "default": true
+          },
+          "indoor_purifier_active": {
+            "type": "boolean",
+            "title": "Indoor Purifier Active",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "member_name",
+          "scheduled_start_hour",
+          "scheduled_end_hour"
+        ],
+        "title": "ScheduledActivity",
+        "description": "An individual household member's daily scheduled event."
+      },
+      "StationMetadataSchema": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "station": {
+            "type": "string",
+            "title": "Station"
+          },
+          "distance_km": {
+            "type": "number",
+            "title": "Distance Km"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Observed At"
+          },
+          "fetched_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Fetched At"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "live",
+              "modelled_live",
+              "stale"
+            ],
+            "title": "Status"
+          },
+          "is_reference_grade": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Reference Grade"
+          },
+          "conversion_note": {
+            "type": "string",
+            "title": "Conversion Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "station",
+          "distance_km",
+          "observed_at",
+          "fetched_at",
+          "status"
+        ],
+        "title": "StationMetadataSchema",
+        "description": "Auditable sensor station metadata attached to every recommendation card."
+      },
+      "SubIndexItem": {
+        "properties": {
+          "pollutant": {
+            "type": "string",
+            "title": "Pollutant"
+          },
+          "concentration": {
+            "type": "number",
+            "title": "Concentration"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "sub_index": {
+            "type": "integer",
+            "title": "Sub Index"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "color_code": {
+            "type": "string",
+            "title": "Color Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pollutant",
+          "concentration",
+          "unit",
+          "sub_index",
+          "category",
+          "color_code"
+        ],
+        "title": "SubIndexItem",
+        "description": "Sub-index for an individual air pollutant."
+      },
+      "TravelAdviceRequest": {
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude"
+          },
+          "distance_km": {
+            "type": "number",
+            "maximum": 200.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Distance Km"
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Question"
+          }
+        },
+        "type": "object",
+        "required": [
+          "latitude",
+          "longitude",
+          "distance_km",
+          "question"
+        ],
+        "title": "TravelAdviceRequest"
+      },
+      "TravelAdviceResponse": {
+        "properties": {
+          "recommendation": {
+            "$ref": "#/components/schemas/CommuteModeComparison"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "exposure",
+              "emissions",
+              "time",
+              "balance"
+            ],
+            "title": "Priority"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "grok",
+              "gemini",
+              "fallback_template"
+            ],
+            "title": "Source"
+          },
+          "smog_advisory": {
+            "type": "string",
+            "title": "Smog Advisory"
+          }
+        },
+        "type": "object",
+        "required": [
+          "recommendation",
+          "priority",
+          "source",
+          "smog_advisory"
+        ],
+        "title": "TravelAdviceResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WhatsAppFamilyCard": {
+        "properties": {
+          "headline": {
+            "type": "string",
+            "title": "Headline"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "english",
+              "hinglish"
+            ],
+            "title": "Language"
+          },
+          "current_aqi_badge": {
+            "type": "string",
+            "title": "Current Aqi Badge"
+          },
+          "key_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 2,
+            "title": "Key Actions"
+          },
+          "commute_tip": {
+            "type": "string",
+            "title": "Commute Tip"
+          },
+          "indoor_tip": {
+            "type": "string",
+            "title": "Indoor Tip"
+          },
+          "sensitive_member_alert": {
+            "type": "string",
+            "title": "Sensitive Member Alert"
+          },
+          "formatted_message": {
+            "type": "string",
+            "title": "Formatted Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "headline",
+          "language",
+          "current_aqi_badge",
+          "key_actions",
+          "commute_tip",
+          "indoor_tip",
+          "sensitive_member_alert",
+          "formatted_message"
+        ],
+        "title": "WhatsAppFamilyCard",
+        "description": "Copy-ready daily WhatsApp card for Indian families."
+      }
+    }
+  }
+}

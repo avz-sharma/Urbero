@@ -1,0 +1,20 @@
+title = "gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist for testing and example variables"
+paths = [
+  '''^tests/fixtures/.*''',
+]
+regexes = [
+  '''your_.*_key_here''',
+  '''your-project\.supabase\.co''',
+]
+
+[[rules]]
+id = "urbero-waqi-token"
+description = "WAQI API token assigned to an environment variable"
+regex = '''(?i)WAQI_API_TOKEN\s*=\s*["']?([a-f0-9]{32,})'''
+secretGroup = 1
