@@ -2,6 +2,15 @@
 
 Python tools use `python -m` to avoid Windows launcher DLL failures.
 
+## Second evaluation candidate checks
+
+- Ruff C901 passed at the default threshold. Geocoding went from 24 to 7, errands from 15 to 10, routine optimization from 15 to 7, cache coalescing from 14 to 7, and confidence scoring from 12 to 6.
+- AQI and exposure coverage was 95.29%, with every module at 90% or higher. OpenAPI and TypeScript regeneration produced no diff. Prettier passed on the edited frontend files.
+- Chromium passed the four light/dark and 390/1440 px combinations, the FastAPI recorded-provider errand and room flows, and the expected provider-outage state. There were zero axe violations, CSP violations, or uncaught page errors. The outage produced its expected HTTP 503.
+- Lighthouse accessibility scored 100 for both landing configurations. The recorded-provider workspace scored 100 at light/390 px and 96 at dark/1440 px.
+- `pip-audit` and `npm audit --audit-level=high` found no known vulnerabilities. Gitleaks reported no leaks in the scanned history.
+- The initial client bundle is 110.06 kB gzip compared with 109.59 kB at baseline. The lazy commute chart stayed at 1.04 kB gzip. Two warm-cache runs of 50 daily-plan requests had median/p95 latencies of 3.05/4.89 ms and 3.38/5.24 ms, versus 4.41/5.73 ms and 3.89/5.53 ms at baseline. These timings use recorded CAMS data and disabled model generation.
+
 
 ## Backend: ruff check .
 

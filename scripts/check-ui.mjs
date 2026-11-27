@@ -431,14 +431,18 @@ async function snapshotWorkspace(chrome, theme, width, options) {
       { name: "prefers-reduced-motion", value: "reduce" },
     ]);
     await page.goto(replayUrl);
-    await page
-      .locator("button")
-      .filter((button) => button.textContent.trim() === "Get Started")
-      .click();
-    await page
-      .locator("button")
-      .filter((button) => button.textContent.trim() === "Noida")
-      .click();
+    for (const label of ["Get Started", "Noida"]) {
+      const button = await page.waitForFunction(
+        (text) =>
+          Array.from(document.querySelectorAll("button")).find(
+            (element) => element.textContent.trim() === text,
+          ),
+        {},
+        label,
+      );
+      await button.asElement().evaluate((element) => element.click());
+      await button.dispose();
+    }
     await page.waitForSelector("#tab-overview", { visible: true });
     return await snapshot(page, options);
   } finally {
