@@ -162,9 +162,7 @@ async def advise_commute(request: Request, travel: TravelAdviceRequest) -> Trave
         if choice
         else min(eligible, key=lambda option: option.personal_inhaled_pm25_ug),
         priority=choice.priority if choice else "exposure",
-        source=("gemini" if grok_client.gemini.api_key else "grok")
-        if choice
-        else "fallback_template",
+        source=grok_client.provider if choice else "fallback_template",
         smog_advisory=DISCLAIMER_SMOG_EPISODE if smog else "",
     )
 

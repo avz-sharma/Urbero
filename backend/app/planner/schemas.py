@@ -170,10 +170,13 @@ class TravelChoice(BaseModel):
     priority: Literal["exposure", "emissions", "time", "balance"]
 
 
+PlannerProvider = Literal["grok", "gemini", "groq"]
+
+
 class TravelAdviceResponse(BaseModel):
     recommendation: CommuteModeComparison
     priority: Literal["exposure", "emissions", "time", "balance"]
-    source: Literal["grok", "gemini", "fallback_template"]
+    source: Literal[PlannerProvider, "fallback_template"]
     smog_advisory: str
 
 

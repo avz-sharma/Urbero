@@ -2419,6 +2419,7 @@
             "enum": [
               "grok",
               "gemini",
+              "groq",
               "fallback_template"
             ],
             "title": "Source"

@@ -1,4 +1,4 @@
-"""Grok (xAI) client for personalizing briefings at the application edge.
+"""Validated model client for personalizing briefings at the application edge.
 
 Pattern: Deterministic Core, LLM at the Edge.
 Passes pre-computed deterministic JSON numbers into prompts as immutable facts.
@@ -15,6 +15,7 @@ from hashlib import sha256
 from html import escape
 from time import monotonic
 from typing import Literal, TypeVar
+from unicodedata import normalize
 
 import httpx
 from pydantic import BaseModel
@@ -27,6 +28,7 @@ from backend.app.config.constants import (
     DISCLAIMER_SMOG_EPISODE,
     GROK_DEFAULT_BASE_URL,
     GROK_TIMEOUT_SECONDS,
+    GROQ_BASE_URL,
 )
 from backend.app.exposure.cadr import RoomCADRResult
 from backend.app.exposure.commute import CommuteModeComparison
@@ -37,6 +39,7 @@ from backend.app.planner.gemini import GeminiClient, validate_model_response
 from backend.app.planner.schemas import (
     CommunityBrief,
     NarrativeBriefings,
+    PlannerProvider,
     RecommendationCard,
     StationMetadataSchema,
     TravelChoice,
@@ -45,7 +48,12 @@ from backend.app.planner.schemas import (
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
-BRIEFING_TERMS = re.compile(r"\b(?:PM2\.5|PM10|NO2|SO2|O3|CO2|N95|FFP2)\b", re.I)
+BRIEFING_TERMS = re.compile(r"\b(?:PM2\.5|PM10|NO2|SO2|O3|CO2|N95|FFP2|CNG 3-Wheeler)\b", re.I)
+NUMBERED_LIST_MARKER = re.compile(r"^[ \t]*[1-9][0-9]?[.)][ \t]+", re.M)
+
+
+def _aqi_badge_for_model(aqi: CPCBAQIResult) -> str:
+    return f"AQI {aqi.overall_aqi} - {aqi.category}" if aqi.is_valid else "AQI unavailable"
 
 
 def build_edge_prompt(
@@ -68,6 +76,7 @@ def build_edge_prompt(
         "is_reference_grade": station.is_reference_grade,
         "station_status": station.status,
         "current_aqi": aqi.overall_aqi if aqi.is_valid else None,
+        "current_aqi_badge": _aqi_badge_for_model(aqi),
         "dominant_pollutant": aqi.dominant_pollutant,
         "aqi_category": aqi.category,
         "data_confidence_level": confidence.level,
@@ -102,7 +111,7 @@ IMMUTABLE FACTS (DO NOT ALTER OR RECALCULATE ANY NUMBERS):
 {sanitized_notes}
 
 MANDATORY RULES:
-1. Use the exact current AQI and category in current_aqi_badge as "AQI <value> - <category>", or "AQI unavailable" if no valid AQI was provided. Elsewhere, use only qualitative advice or the exact current AQI prefixed by "AQI". Never calculate or restate numeric estimates. The server adds estimates, provenance and reference values.
+1. Copy current_aqi_badge verbatim from the facts. Use qualitative advice in the other fields. Use the pollutant name PM2.5 and respirator names N95 and FFP2 where applicable. Never calculate or restate numeric estimates. The server adds estimates, provenance and reference values.
 2. If smog_episode_active is true:
    - Explicitly instruct sensitive members (children, asthmatics, elderly) to avoid morning outdoor exertion.
    - Advise fitted N95/FFP2 respirator masks for essential outdoor travel (explicitly state cloth and surgical masks do not block PM2.5).
@@ -123,11 +132,10 @@ def _accept_briefings(
 ) -> bool:
     family = briefings.whatsapp_card
     if family.language != language:
+        logger.info("planner_briefing_rejected reason=language")
         return False
-    expected_badge = (
-        f"AQI {aqi.overall_aqi} - {aqi.category}" if aqi.is_valid else "AQI unavailable"
-    )
-    if family.current_aqi_badge not in (expected_badge, canonical_badge):
+    if family.current_aqi_badge not in (_aqi_badge_for_model(aqi), canonical_badge):
+        logger.info("planner_briefing_rejected reason=aqi_badge")
         return False
     allowed_aqi = (
         re.compile(rf"\bAQI[ \t]+{aqi.overall_aqi}(?!\w|[.,]\d)", re.I) if aqi.is_valid else None
@@ -145,16 +153,18 @@ def _accept_briefings(
         briefings.community_brief.formatted_brief,
     ]
     for text in qualitative_text:
+        text = NUMBERED_LIST_MARKER.sub("", normalize("NFKC", text))
         text = BRIEFING_TERMS.sub("", text)
         if allowed_aqi is not None:
             text = allowed_aqi.sub("", text)
         if any(char.isnumeric() for char in text):
+            logger.info("planner_briefing_rejected reason=unexpected_number")
             return False
     return True
 
 
 class GrokPlannerClient:
-    """Client for generating narrative edge briefings with Grok (xAI) and resilient template fallback."""
+    """Generate validated planner narratives with resilient template fallback."""
 
     def __init__(
         self,
@@ -164,12 +174,26 @@ class GrokPlannerClient:
     ) -> None:
         self.gemini = GeminiClient()
         self._travel_choices: dict[bytes, tuple[float, TravelChoice]] = {}
-        self.api_key = api_key or os.getenv("GROK_API_KEY") or os.getenv("XAI_API_KEY", "")
-        self.model = model or os.getenv("GROK_MODEL", "")
+        grok_key = (api_key or os.getenv("GROK_API_KEY") or os.getenv("XAI_API_KEY") or "").strip()
+        groq_key = os.getenv("GROQ_API_KEY", "").strip()
+        # Earlier deployments stored their Groq credential under the similar Grok name.
+        legacy_groq = grok_key.startswith("gsk_")
+        self.provider: PlannerProvider
+        if groq_key or legacy_groq:
+            self.provider = "groq"
+            self.api_key = groq_key or grok_key
+            legacy_model = (model or os.getenv("GROK_MODEL", "")) if legacy_groq else ""
+            self.model = (os.getenv("GROQ_MODEL") or legacy_model or "").strip()
+            self.base_url = GROQ_BASE_URL
+        else:
+            self.provider = "gemini" if self.gemini.api_key else "grok"
+            self.api_key = grok_key
+            self.model = (model or os.getenv("GROK_MODEL") or "").strip()
+            self.base_url = (
+                base_url or os.getenv("GROK_BASE_URL") or GROK_DEFAULT_BASE_URL
+            ).rstrip("/")
         if self.api_key and not self.model:
-            raise ValueError("GROK_MODEL is required when Grok is enabled")
-        raw_base = base_url or os.getenv("GROK_BASE_URL") or GROK_DEFAULT_BASE_URL
-        self.base_url = raw_base.rstrip("/")
+            raise ValueError("Set the server-side model ID for the configured chat API.")
         self.endpoint = f"{self.base_url}/chat/completions"
 
     async def choose_travel_mode(
@@ -194,7 +218,7 @@ class GrokPlannerClient:
                 "aqi_category": aqi_category,
             }
         )
-        task = {
+        task: dict[str, object] = {
             "model": self.model,
             "messages": [
                 {
@@ -217,7 +241,7 @@ class GrokPlannerClient:
             ],
             "response_format": {"type": "json_object"},
         }
-        if self.gemini.api_key:
+        if self.provider == "gemini":
             eligible = {option.mode for option in options}
             cache_fields = {
                 "question": question.strip(),
@@ -245,30 +269,9 @@ class GrokPlannerClient:
                 return choice
             return None
 
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(GROK_TIMEOUT_SECONDS, connect=3)
-        ) as client:
-            for attempt in range(2):
-                try:
-                    response = await client.post(
-                        self.endpoint,
-                        headers={"Authorization": f"Bearer {self.api_key}"},
-                        json=task,
-                    )
-                    response.raise_for_status()
-                    choice = TravelChoice.model_validate_json(
-                        response.json()["choices"][0]["message"]["content"]
-                    )
-                    if any(option.mode == choice.mode for option in options):
-                        return choice
-                    raise ValueError("Ineligible travel mode")
-                except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as err:
-                    logger.warning(
-                        "travel_advice_attempt_failed attempt=%s error_type=%s",
-                        attempt + 1,
-                        type(err).__name__,
-                    )
-        return None
+        return await self._generate_chat(
+            task, TravelChoice, lambda choice: any(option.mode == choice.mode for option in options)
+        )
 
     async def generate_plan_briefings(
         self,
@@ -316,6 +319,7 @@ class GrokPlannerClient:
         if briefings is None:
             logger.info("planner_narrative status=fallback_template")
             return fallback
+        logger.info("planner_narrative provider=%s status=generated", self.provider)
         wa_card = briefings.whatsapp_card
         comm_brief = briefings.community_brief
         wa_card.current_aqi_badge = fallback[0].current_aqi_badge
@@ -346,21 +350,30 @@ class GrokPlannerClient:
         self, prompt: str, response_type: type[T], *, accept: Callable[[T], bool] | None = None
     ) -> T | None:
         """Use the configured narrative transport and validate one candidate per attempt."""
-        if self.gemini.api_key:
+        if self.provider == "gemini":
             return await self.gemini.generate(prompt, response_type, accept=accept)
         if not self.api_key:
             return None
-        payload = {
+        payload: dict[str, object] = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.2,
             "response_format": {"type": "json_object"},
         }
-        for attempt in range(2):
-            try:
-                async with httpx.AsyncClient(
-                    timeout=httpx.Timeout(GROK_TIMEOUT_SECONDS, connect=3)
-                ) as client:
+        return await self._generate_chat(payload, response_type, accept)
+
+    async def _generate_chat(
+        self, payload: dict[str, object], response_type: type[T], accept: Callable[[T], bool] | None
+    ) -> T | None:
+        if self.provider == "groq":
+            payload["max_completion_tokens"] = 128 if response_type is TravelChoice else 1024
+            if self.model.startswith("qwen/qwen3"):
+                payload.update(reasoning_effort="none", reasoning_format="hidden")
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(GROK_TIMEOUT_SECONDS, connect=3)
+        ) as client:
+            for attempt in range(2):
+                try:
                     response = await client.post(
                         self.endpoint,
                         headers={"Authorization": f"Bearer {self.api_key}"},
@@ -369,15 +382,20 @@ class GrokPlannerClient:
                     if response.status_code == 200:
                         raw = response.json()["choices"][0]["message"]["content"]
                         return validate_model_response(raw, response_type, accept)
+                    status = response.status_code
                     logger.warning(
-                        "grok_generation_failed attempt=%s status=%s",
+                        "planner_generation_failed provider=%s attempt=%s status=%s",
+                        self.provider,
                         attempt + 1,
-                        response.status_code,
+                        status,
                     )
-            except (httpx.HTTPError, ValueError, TypeError, KeyError, IndexError) as err:
-                logger.warning(
-                    "grok_generation_failed attempt=%s error_type=%s",
-                    attempt + 1,
-                    type(err).__name__,
-                )
+                    if status < 500 and status not in {408, 429}:
+                        return None
+                except (httpx.HTTPError, ValueError, TypeError, KeyError, IndexError) as err:
+                    logger.warning(
+                        "planner_generation_failed provider=%s attempt=%s error_type=%s",
+                        self.provider,
+                        attempt + 1,
+                        type(err).__name__,
+                    )
         return None

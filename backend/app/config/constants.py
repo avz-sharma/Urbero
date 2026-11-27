@@ -256,6 +256,7 @@ DISCLAIMER_INDOOR_PLANTS: Final[str] = (
 # Model identifier read strictly from environment variable; default fallback provided.
 # ==============================================================================
 GROK_DEFAULT_BASE_URL: Final[str] = "https://api.x.ai/v1"
+GROQ_BASE_URL: Final[str] = "https://api.groq.com/openai/v1"
 GROK_TIMEOUT_SECONDS: Final[float] = 15.0
 
 # ==============================================================================

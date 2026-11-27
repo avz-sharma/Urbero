@@ -21,7 +21,49 @@ from backend.app.exposure.optimizer import (
 )
 from backend.app.planner.fallback import generate_deterministic_fallback
 from backend.app.planner.grok import GrokPlannerClient, build_edge_prompt
-from backend.app.planner.schemas import NarrativeBriefings, StationMetadataSchema
+from backend.app.planner.schemas import NarrativeBriefings, StationMetadataSchema, TravelChoice
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "key_variable,model_variable", [("GROQ_API_KEY", "GROQ_MODEL"), ("GROK_API_KEY", "GROK_MODEL")]
+)
+async def test_qwen_uses_groq_without_forwarding_its_key_to_xai(
+    monkeypatch: pytest.MonkeyPatch, key_variable: str, model_variable: str
+) -> None:
+    monkeypatch.setenv(key_variable, "gsk_test_fixture")
+    monkeypatch.setenv(model_variable, "qwen/qwen3-test-model")
+    monkeypatch.setenv("GROK_BASE_URL", "https://api.x.ai/v1")
+    requests = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"mode":"bus_public","priority":"exposure"}'}}]
+            },
+        )
+
+    original = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx, "AsyncClient", lambda **kwargs: original(transport=httpx.MockTransport(respond))
+    )
+    client = GrokPlannerClient()
+    options = compare_commute_modes(8, 120, include_metro=False)
+    travel = await client.choose_travel_mode("Prefer public transit", options, 120, "live", False)
+    structured = await client.generate_structured("Return JSON", TravelChoice)
+    assert travel == structured == TravelChoice(mode="bus_public", priority="exposure")
+    assert [str(request.url) for request in requests] == [
+        "https://api.groq.com/openai/v1/chat/completions"
+    ] * 2
+    assert client.provider == "groq"
+    for request in requests:
+        assert request.headers["Authorization"] == "Bearer gsk_test_fixture"
+        payload = json.loads(request.content)
+        assert payload["model"] == "qwen/qwen3-test-model"
+        assert payload["reasoning_effort"] == "none"
+        assert payload["reasoning_format"] == "hidden"
 
 
 @pytest.mark.asyncio
@@ -200,10 +242,10 @@ async def test_briefing_retries_conflicts_and_only_returns_validated_copy(
         update={
             "headline": "Personalized air briefing",
             "key_actions": ["Pause outdoor exercise", "Check the purifier"],
-            "commute_tip": "Consider Metro where it serves your route.",
-            "indoor_tip": "Check the recommended purifier CADR.",
+            "commute_tip": "Consider Metro or Auto-Rickshaw (CNG 3-Wheeler) if available.",
+            "indoor_tip": "Check the recommended purifier CADR for PM₂.₅.",
             "sensitive_member_alert": "Seniors should avoid outdoor exertion.",
-            "formatted_message": "Prepare for AQI 340 and limit outdoor exercise.",
+            "formatted_message": "Prepare for AQI 340.\n1. Limit outdoor exercise.\n2. Check the purifier.",
         }
     )
     valid_community = community.model_copy(

@@ -18,7 +18,7 @@ python -m uvicorn backend.app.api.routes:app --reload --port 8000 --no-access-lo
 npm --prefix frontend run dev
 ```
 
-Open http://localhost:5173 and choose a location. Then optionally apply a household preset to load an example schedule for that location. In Routine & Commute, edit activities by local start and end time or ask for travel advice. Metro appears in known operating areas. WAQI requires an operator-owned `WAQI_API_TOKEN`. The app uses labelled CAMS model estimates when a current station reading is unavailable. Narrative generation prefers Gemini when `GEMINI_API_KEY` and `GEMINI_MODEL` are set, otherwise it can use `GROK_API_KEY` and `GROK_MODEL`. Deterministic templates cover disabled or failed generation.
+Open http://localhost:5173 and choose a location. Then optionally apply a household preset to load an example schedule for that location. In Routine & Commute, edit activities by local start and end time or ask for travel advice. Metro appears in known operating areas. WAQI requires an operator-owned `WAQI_API_TOKEN`. The app uses labelled CAMS model estimates when a current station reading is unavailable. Configure Groq with `GROQ_API_KEY` and `GROQ_MODEL` to generate Qwen briefings and travel suggestions. Groq takes precedence when configured. The server also supports Gemini (`GEMINI_API_KEY`, `GEMINI_MODEL`) and xAI (`GROK_API_KEY`, `GROK_MODEL`). Deployments with an existing `gsk_` key stored under `GROK_API_KEY` can continue using `GROK_MODEL` during migration to the Groq variables. Deterministic templates cover disabled or failed generation.
 
 Run all seven requested gates with `python scripts/verify.py` (or `make verify`). Complete output is saved to [docs/audit-verification.md](docs/audit-verification.md). Python tools use module invocation because executable launchers fail with DLL relocation errors on this Windows installation.
 
@@ -82,14 +82,14 @@ flowchart TD
 | CADR applied dimensions, source adjustment, retry and plants footnote | `exposure/cadr.py`, `IndoorAirGuide/`, `App.tsx` | `test_cadr.py`, `IndoorAirGuide.test.tsx`, `App.test.tsx` |
 | Manual errand stops, fixed-window feasibility, applied emissions and dose change | `exposure/errands.py`, `LowEmissionRoutine/ErrandEditor.tsx`, `LowEmissionRoutine/ErrandLoop.tsx` | `test_errands.py`, `test_integrity.py`, `test_api_routes.py`, `App.test.tsx` |
 | Planet vs. Lungs comparisons | `exposure/commute.py`, `LowEmissionRoutine/` | `test_commute.py`, `LowEmissionRoutine.test.tsx` |
-| Structured Gemini/Grok JSON, retry, fallback briefings and travel advice | `planner/gemini.py`, `planner/grok.py`, `planner/fallback.py` | `test_gemini.py`, `test_planner.py`, `test_api_failures.py` |
+| Structured Groq, Gemini and xAI JSON, retry, fallback briefings and travel advice | `planner/gemini.py`, `planner/grok.py`, `planner/fallback.py` | `test_gemini.py`, `test_planner.py`, `test_api_failures.py` |
 | API response contracts, daily-plan assembly, size limits, CSP and privacy-safe throttling | `planner/schemas.py`, `api/routes.py`, `api/daily_plan.py`, `api/security.py` | `test_api_routes.py`, `test_api_failures.py`, `test_browser_security.py` |
 | Location gate, GPS/search/chips, unselected presets | `App.tsx`, `components/LocationPicker.tsx`, `HouseholdProfile/`, `providers/geocoding.py` | `App.test.tsx`, `LocationPicker.test.tsx`, `HouseholdProfile.test.tsx`, `test_geocoding.py` |
 | Four tabs, keyboard focus, chart/table alternatives, light and dark accessibility | `components/DashboardShell.tsx`, `LowEmissionRoutine/`, `scripts/check-ui.mjs` | `DashboardShell.test.tsx`, `LowEmissionRoutine.test.tsx`, `App.test.tsx`, Playwright and Lighthouse |
 | Card provenance and expandable actual math | `common/RecommendationCards.tsx`, `common/MathDrawer.tsx`, `ImpactJustification/` | `RecommendationCards.test.tsx`, `ImpactJustification.test.tsx` |
 | Room-photo validation / EXIF removal / unavailable analysis | `planner/vision.py` | `test_vision.py`, `test_api_routes.py` |
 | Pure engines, no external I/O imports | `aqi/`, `exposure/` | `test_pure_imports.py` |
-| Challenge source alignment (pending) | The brief requires OpenAQ v3 observations and same-station history with Grok at the narrative edge. This branch uses WAQI, labelled archived CAMS model output and Gemini-first generation. | OpenAQ replay and operator-credential failover checks belong to the provider alignment phase. See [ADR 0002](docs/adr/0002-waqi-cams-location-first.md). |
+| Challenge source alignment (pending) | The brief requires OpenAQ v3 observations and same-station history with xAI Grok at the narrative edge. The deployed configuration uses WAQI, labelled archived CAMS model output and Groq with Qwen. | OpenAQ replay and operator-credential failover checks belong to the provider alignment phase. See [ADR 0002](docs/adr/0002-waqi-cams-location-first.md). |
 
 Backend paths above are relative to `backend/app/`; frontend component paths are relative to `frontend/src/`.
 
