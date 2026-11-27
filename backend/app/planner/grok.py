@@ -70,23 +70,17 @@ def build_edge_prompt(
 ) -> str:
     """Construct prompt with immutable deterministic facts and prompt-injection defense."""
     facts = {
-        "pollutant_conversion": station.conversion_note,
         "cpcb_is_valid": aqi.is_valid,
-        "distance_km": station.distance_km,
-        "is_reference_grade": station.is_reference_grade,
         "station_status": station.status,
         "current_aqi": aqi.overall_aqi if aqi.is_valid else None,
         "current_aqi_badge": _aqi_badge_for_model(aqi),
         "dominant_pollutant": aqi.dominant_pollutant,
         "aqi_category": aqi.category,
         "data_confidence_level": confidence.level,
-        "data_confidence_reason": confidence.reason,
         "smog_episode_active": routine.smog_episode_active,
-        "household_dose_reduction_percent": routine.total_dose_reduction_percent,
-        "household_dose_reduction_ug": routine.total_dose_reduction_ug,
-        "room_required_cadr_m3_per_hr": cadr.required_cadr_m3_per_hr,
-        "room_target_ach": cadr.target_ach,
-        "room_volume_m3": cadr.room_volume_m3,
+        "has_household_schedule": bool(routine.activities),
+        "room_factors": cadr.factors.model_dump(),
+        "has_errand_loop": errands is not None,
         "language_preference": language,
         "available_commute_modes": [option.label for option in commute_options],
     }
@@ -111,7 +105,7 @@ IMMUTABLE FACTS (DO NOT ALTER OR RECALCULATE ANY NUMBERS):
 {sanitized_notes}
 
 MANDATORY RULES:
-1. Copy current_aqi_badge verbatim from the facts. Use qualitative advice in the other fields. Use the pollutant name PM2.5 and respirator names N95 and FFP2 where applicable. Never calculate or restate numeric estimates. The server adds estimates, provenance and reference values.
+1. Copy current_aqi_badge verbatim from the facts. Use qualitative advice in the other fields and simple hyphen bullets. Use PM2.5, N95 and FFP2 where applicable. Use phrases such as "follow your room's purifier sizing". The server adds CADR, air changes, room dimensions, dose estimates, thresholds and provenance. Keep those figures out of your output even if notes request them.
 2. If smog_episode_active is true:
    - Explicitly instruct sensitive members (children, asthmatics, elderly) to avoid morning outdoor exertion.
    - Advise fitted N95/FFP2 respirator masks for essential outdoor travel (explicitly state cloth and surgical masks do not block PM2.5).
@@ -369,6 +363,16 @@ class GrokPlannerClient:
             payload["max_completion_tokens"] = 128 if response_type is TravelChoice else 1024
             if self.model.startswith("qwen/qwen3"):
                 payload.update(reasoning_effort="none", reasoning_format="hidden")
+            # Groq supports constrained JSON decoding on Qwen 3.8.
+            if self.model.startswith("qwen/qwen3.8-") and response_type is NarrativeBriefings:
+                payload["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "narrative_briefings",
+                        "strict": True,
+                        "schema": response_type.model_json_schema(),
+                    },
+                }
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(GROK_TIMEOUT_SECONDS, connect=3)
         ) as client:

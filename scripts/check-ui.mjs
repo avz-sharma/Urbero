@@ -105,6 +105,9 @@ async function openLocationGate(page, url) {
     .map((directive) => directive.trim())
     .find((directive) => directive.startsWith("script-src "));
   assert.equal(scripts, "script-src 'self'");
+  await page
+    .getByRole("link", { name: "Skip to main content" })
+    .waitFor({ state: "attached" });
   await page.keyboard.press("Tab");
   assert.equal(
     await page.evaluate(() => document.activeElement?.textContent?.trim()),

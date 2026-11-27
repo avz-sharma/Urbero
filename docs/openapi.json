@@ -774,6 +774,7 @@
             "title": "Formatted Brief"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "rwa_society_advisory",
@@ -2521,6 +2522,7 @@
             "title": "Formatted Message"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "headline",

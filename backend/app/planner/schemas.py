@@ -83,6 +83,8 @@ class RecommendationCard(BaseModel):
 class WhatsAppFamilyCard(BaseModel):
     """Copy-ready daily WhatsApp card for Indian families."""
 
+    model_config = ConfigDict(extra="forbid")
+
     headline: str
     language: Literal["english", "hinglish"]
     current_aqi_badge: str
@@ -95,6 +97,8 @@ class WhatsAppFamilyCard(BaseModel):
 
 class CommunityBrief(BaseModel):
     """Copy-ready community briefing for RWAs and schools."""
+
+    model_config = ConfigDict(extra="forbid")
 
     rwa_society_advisory: str
     school_outdoor_activity_recommendation: str
