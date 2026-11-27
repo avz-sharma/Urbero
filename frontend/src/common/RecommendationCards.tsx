@@ -44,11 +44,7 @@ export function RecommendationCards({
                 ([key, value]) => (
                   <div key={key}>
                     <dt>{key.replace(/_/g, " ")}</dt>
-                    <dd>
-                      {typeof value === "object"
-                        ? JSON.stringify(value)
-                        : String(value)}
-                    </dd>
+                    <dd>{value === null ? "Unavailable" : String(value)}</dd>
                   </div>
                 ),
               )}

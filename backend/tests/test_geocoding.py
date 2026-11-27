@@ -52,6 +52,35 @@ async def test_india_filter_duplicate_and_search_cache(monkeypatch: pytest.Monke
 
 
 @pytest.mark.asyncio
+async def test_invalid_open_meteo_row_does_not_hide_later_indian_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hosts = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        hosts.append(request.url.host)
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "name": "Malformed",
+                        "country_code": "IN",
+                        "latitude": "not a coordinate",
+                        "longitude": 73.85,
+                    },
+                    {"name": "Pune", "country_code": "IN", "latitude": 18.52, "longitude": 73.85},
+                ]
+            },
+        )
+
+    transport_client(monkeypatch, respond)
+    results = await GeocodingProvider().search_locations("Pune")
+    assert [item.city for item in results] == ["Pune"]
+    assert hosts == ["geocoding-api.open-meteo.com"]
+
+
+@pytest.mark.asyncio
 async def test_locality_nominatim_and_reverse_snapping(monkeypatch: pytest.MonkeyPatch) -> None:
     def handler(request):
         if "geocoding-api" in request.url.host:

@@ -128,9 +128,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Health Check Api Health Get"
+                  "$ref": "#/components/schemas/HealthResponse"
                 }
               }
             }
@@ -177,9 +175,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Nearest Station Readings Api Stations Nearest Get"
+                  "$ref": "#/components/schemas/NearestStationResponse"
                 }
               }
             }
@@ -495,7 +491,6 @@
     "/api/plan": {
       "post": {
         "summary": "Generate Daily Plan",
-        "description": "End-to-end personalized daily plan: deterministic calculations with GenAI edge narrative.",
         "operationId": "generate_daily_plan_api_plan_post",
         "requestBody": {
           "content": {
@@ -534,7 +529,6 @@
     "/api/plan/daily": {
       "post": {
         "summary": "Generate Daily Plan",
-        "description": "End-to-end personalized daily plan: deterministic calculations with GenAI edge narrative.",
         "operationId": "generate_daily_plan_api_plan_daily_post",
         "requestBody": {
           "content": {
@@ -1037,6 +1031,9 @@
             "type": "string",
             "title": "History Source",
             "default": "Unavailable; schedule timing optimization disabled."
+          },
+          "exposure_reference_labels": {
+            "$ref": "#/components/schemas/ExposureReferenceLabels"
           }
         },
         "type": "object",
@@ -1287,6 +1284,22 @@
         "title": "ErrandStop",
         "description": "Destination stop for an errand with spatial and temporal constraints."
       },
+      "ExposureReferenceLabels": {
+        "properties": {
+          "cigarette_heuristic": {
+            "type": "string",
+            "title": "Cigarette Heuristic",
+            "default": "The cigarette equivalent metric is based on the Berkeley Earth benchmark (~22 \u00b5g/m\u00b3 over 24 hours \u2248 1 cigarette). This is a public communication heuristic to contextualize particulate exposure, NOT a clinical diagnosis or medical equivalence."
+          },
+          "reference_values": {
+            "type": "string",
+            "title": "Reference Values",
+            "default": "WHO 2021 (15 \u00b5g/m\u00b3) and India NAAQS (60 \u00b5g/m\u00b3) 24-hour PM2.5 levels are regulatory and scientific reference values, not a personal 'safe pollution budget'."
+          }
+        },
+        "type": "object",
+        "title": "ExposureReferenceLabels"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1299,6 +1312,36 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "healthy",
+            "title": "Status",
+            "default": "healthy"
+          },
+          "service": {
+            "type": "string",
+            "const": "urbero-backend",
+            "title": "Service",
+            "default": "urbero-backend"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp",
+          "environment"
+        ],
+        "title": "HealthResponse"
       },
       "LocationSearchResult": {
         "properties": {
@@ -1349,7 +1392,25 @@
             "title": "Formula Expression"
           },
           "inputs": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "type": "object",
             "title": "Inputs"
           },
@@ -1418,6 +1479,10 @@
             "type": "string",
             "title": "Travel Mode"
           },
+          "emissions_factor_g_per_km": {
+            "type": "number",
+            "title": "Emissions Factor G Per Km"
+          },
           "tailpipe_co2_saved_grams": {
             "type": "number",
             "title": "Tailpipe Co2 Saved Grams"
@@ -1448,6 +1513,7 @@
           "merged_loop_distance_km",
           "distance_saved_km",
           "travel_mode",
+          "emissions_factor_g_per_km",
           "tailpipe_co2_saved_grams",
           "baseline_inhaled_pm25_ug",
           "optimized_inhaled_pm25_ug",
@@ -1549,6 +1615,72 @@
         ],
         "title": "ModelledPollutantHour",
         "description": "Hourly modelled air quality prediction from atmospheric simulation."
+      },
+      "NearestStationResponse": {
+        "properties": {
+          "station_name": {
+            "type": "string",
+            "title": "Station Name"
+          },
+          "distance_km": {
+            "type": "number",
+            "title": "Distance Km"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "live",
+              "modelled_live",
+              "stale"
+            ],
+            "title": "Status"
+          },
+          "is_reference_grade": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Reference Grade"
+          },
+          "observed_at": {
+            "type": "string",
+            "title": "Observed At"
+          },
+          "readings": {
+            "items": {
+              "$ref": "#/components/schemas/SensorReading"
+            },
+            "type": "array",
+            "title": "Readings"
+          },
+          "cpcb_aqi": {
+            "$ref": "#/components/schemas/CPCBAQIResult"
+          },
+          "data_confidence": {
+            "$ref": "#/components/schemas/ConfidenceResult"
+          }
+        },
+        "type": "object",
+        "required": [
+          "station_name",
+          "distance_km",
+          "source",
+          "status",
+          "is_reference_grade",
+          "observed_at",
+          "readings",
+          "cpcb_aqi",
+          "data_confidence"
+        ],
+        "title": "NearestStationResponse"
       },
       "OptimizedActivity": {
         "properties": {
@@ -1714,6 +1846,12 @@
       },
       "RoomCADRResult": {
         "properties": {
+          "dimensions": {
+            "$ref": "#/components/schemas/RoomDimensions"
+          },
+          "factors": {
+            "$ref": "#/components/schemas/RoomIndoorFactors"
+          },
           "room_volume_m3": {
             "type": "number",
             "title": "Room Volume M3"
@@ -1721,6 +1859,10 @@
           "target_ach": {
             "type": "number",
             "title": "Target Ach"
+          },
+          "source_multiplier": {
+            "type": "number",
+            "title": "Source Multiplier"
           },
           "required_cadr_m3_per_hr": {
             "type": "number",
@@ -1746,8 +1888,11 @@
         },
         "type": "object",
         "required": [
+          "dimensions",
+          "factors",
           "room_volume_m3",
           "target_ach",
+          "source_multiplier",
           "required_cadr_m3_per_hr",
           "required_cadr_cfm",
           "sealing_and_source_guidance",
@@ -2016,6 +2161,106 @@
         ],
         "title": "ScheduledActivity",
         "description": "An individual household member's daily scheduled event."
+      },
+      "SensorReading": {
+        "properties": {
+          "parameter": {
+            "type": "string",
+            "title": "Parameter"
+          },
+          "value": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Value"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Observed At"
+          },
+          "fetched_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Fetched At"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "station": {
+            "type": "string",
+            "title": "Station"
+          },
+          "distance_km": {
+            "type": "number",
+            "title": "Distance Km"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "live",
+              "modelled_live",
+              "stale"
+            ],
+            "title": "Status"
+          },
+          "is_reference_grade": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Reference Grade"
+          },
+          "station_latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Station Latitude"
+          },
+          "station_longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Station Longitude"
+          },
+          "conversion_note": {
+            "type": "string",
+            "title": "Conversion Note",
+            "default": "Concentration supplied by provider; hourly/spot estimate, not a certified CPCB average."
+          }
+        },
+        "type": "object",
+        "required": [
+          "parameter",
+          "value",
+          "unit",
+          "observed_at",
+          "fetched_at",
+          "source",
+          "station",
+          "distance_km",
+          "status"
+        ],
+        "title": "SensorReading",
+        "description": "Normalized real-world sensor reading with mandatory honesty metadata."
       },
       "StationMetadataSchema": {
         "properties": {

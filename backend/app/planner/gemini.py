@@ -14,6 +14,15 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
+def validate_model_response(
+    raw: str, response_type: type[T], accept: Callable[[T], bool] | None
+) -> T:
+    result = response_type.model_validate_json(raw, strict=True)
+    if accept is not None and not accept(result):
+        raise ValueError("Model response does not satisfy request constraints")
+    return result
+
+
 class GeminiClient:
     def __init__(self) -> None:
         self.api_key = os.getenv("GEMINI_API_KEY", "")
@@ -42,10 +51,7 @@ class GeminiClient:
                     )
                     response.raise_for_status()
                     candidate = response.json()["candidates"][0]["content"]["parts"][0]["text"]
-                    result = response_type.model_validate_json(candidate, strict=True)
-                    if accept is not None and not accept(result):
-                        raise ValueError("Gemini response does not satisfy request constraints")
-                    return result
+                    return validate_model_response(candidate, response_type, accept)
                 except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as error:
                     logger.warning(
                         "gemini_generation_failed attempt=%s error_type=%s",

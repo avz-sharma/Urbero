@@ -9,12 +9,15 @@ Seamlessly falls back to deterministic template planner on validation or network
 import json
 import logging
 import os
+import re
+from collections.abc import Callable
 from hashlib import sha256
 from html import escape
 from time import monotonic
-from typing import Literal
+from typing import Literal, TypeVar
 
 import httpx
+from pydantic import BaseModel
 
 from backend.app.aqi.confidence import ConfidenceResult
 from backend.app.aqi.cpcb import CPCBAQIResult
@@ -30,7 +33,7 @@ from backend.app.exposure.commute import CommuteModeComparison
 from backend.app.exposure.errands import MergedErrandsResult
 from backend.app.exposure.optimizer import RoutineOptimizationResult
 from backend.app.planner.fallback import generate_deterministic_fallback
-from backend.app.planner.gemini import GeminiClient
+from backend.app.planner.gemini import GeminiClient, validate_model_response
 from backend.app.planner.schemas import (
     CommunityBrief,
     NarrativeBriefings,
@@ -41,6 +44,8 @@ from backend.app.planner.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T", bound=BaseModel)
+BRIEFING_TERMS = re.compile(r"\b(?:PM2\.5|PM10|NO2|SO2|O3|CO2|N95|FFP2)\b", re.I)
 
 
 def build_edge_prompt(
@@ -97,7 +102,7 @@ IMMUTABLE FACTS (DO NOT ALTER OR RECALCULATE ANY NUMBERS):
 {sanitized_notes}
 
 MANDATORY RULES:
-1. NEVER alter, calculate, or invent AQI values, dosages, CADR ratings, percentages, or distances. Use the exact numbers provided.
+1. Use the exact current AQI and category in current_aqi_badge as "AQI <value> - <category>", or "AQI unavailable" if no valid AQI was provided. Elsewhere, use only qualitative advice or the exact current AQI prefixed by "AQI". Never calculate or restate numeric estimates. The server adds estimates, provenance and reference values.
 2. If smog_episode_active is true:
    - Explicitly instruct sensitive members (children, asthmatics, elderly) to avoid morning outdoor exertion.
    - Advise fitted N95/FFP2 respirator masks for essential outdoor travel (explicitly state cloth and surgical masks do not block PM2.5).
@@ -107,24 +112,45 @@ MANDATORY RULES:
 5. For commute advice, use only the listed commute modes and describe options as conditional on the user's route.
 
 Output valid JSON matching this schema:
-{{
-  "whatsapp_card": {{
-    "headline": "string",
-    "language": "{language}",
-    "current_aqi_badge": "string",
-    "key_actions": ["string", "string"],
-    "commute_tip": "string",
-    "indoor_tip": "string",
-    "sensitive_member_alert": "string",
-    "formatted_message": "string"
-  }},
-  "community_brief": {{
-    "rwa_society_advisory": "string",
-    "school_outdoor_activity_recommendation": "string",
-    "mask_and_health_guidance": "string",
-    "formatted_brief": "string"
-  }}
-}}"""
+{json.dumps(NarrativeBriefings.model_json_schema(), indent=2)}"""
+
+
+def _accept_briefings(
+    briefings: NarrativeBriefings,
+    language: str,
+    aqi: CPCBAQIResult,
+    canonical_badge: str,
+) -> bool:
+    family = briefings.whatsapp_card
+    if family.language != language:
+        return False
+    expected_badge = (
+        f"AQI {aqi.overall_aqi} - {aqi.category}" if aqi.is_valid else "AQI unavailable"
+    )
+    if family.current_aqi_badge not in (expected_badge, canonical_badge):
+        return False
+    allowed_aqi = (
+        re.compile(rf"\bAQI[ \t]+{aqi.overall_aqi}(?!\w|[.,]\d)", re.I) if aqi.is_valid else None
+    )
+    qualitative_text = [
+        family.headline,
+        *family.key_actions,
+        family.commute_tip,
+        family.indoor_tip,
+        family.sensitive_member_alert,
+        family.formatted_message,
+        briefings.community_brief.rwa_society_advisory,
+        briefings.community_brief.school_outdoor_activity_recommendation,
+        briefings.community_brief.mask_and_health_guidance,
+        briefings.community_brief.formatted_brief,
+    ]
+    for text in qualitative_text:
+        text = BRIEFING_TERMS.sub("", text)
+        if allowed_aqi is not None:
+            text = allowed_aqi.sub("", text)
+        if any(char.isnumeric() for char in text):
+            return False
+    return True
 
 
 class GrokPlannerClient:
@@ -280,23 +306,50 @@ class GrokPlannerClient:
             untrusted_notes,
         )
 
-        if self.gemini.api_key:
-            briefings = await self.gemini.generate(prompt, NarrativeBriefings)
-        else:
-            briefings = await self._generate_grok_briefings(prompt)
+        briefings = await self.generate_structured(
+            prompt,
+            NarrativeBriefings,
+            accept=lambda result: _accept_briefings(
+                result, lang_lit, aqi, fallback[0].current_aqi_badge
+            ),
+        )
         if briefings is None:
             logger.info("planner_narrative status=fallback_template")
             return fallback
         wa_card = briefings.whatsapp_card
         comm_brief = briefings.community_brief
-        wa_card.formatted_message += "\n" + DISCLAIMER_CIGARETTE_HEURISTIC
-        comm_brief.formatted_brief += "\n" + DISCLAIMER_EXPOSURE_BASELINES
+        wa_card.current_aqi_badge = fallback[0].current_aqi_badge
+        provenance = (
+            f"{wa_card.current_aqi_badge}\n"
+            f"Source: {station.source}. Status: {station.status}. "
+            f"Observed at {station.observed_at.isoformat()}."
+        )
+        dose_estimate = (
+            f"\nHousehold dose reduction estimate: {routine.total_dose_reduction_ug} µg "
+            f"({routine.total_dose_reduction_percent}%)."
+            if routine.activities
+            else ""
+        )
+        wa_card.formatted_message += (
+            f"\n{provenance}\n{fallback[0].indoor_tip}{dose_estimate}\n"
+            + DISCLAIMER_CIGARETTE_HEURISTIC
+        )
+        comm_brief.formatted_brief += f"\n{provenance}\n" + DISCLAIMER_EXPOSURE_BASELINES
         if routine.smog_episode_active:
+            wa_card.sensitive_member_alert = fallback[0].sensitive_member_alert
+            comm_brief.mask_and_health_guidance = fallback[1].mask_and_health_guidance
             wa_card.formatted_message += "\n" + DISCLAIMER_SMOG_EPISODE
             comm_brief.formatted_brief += "\n" + DISCLAIMER_SMOG_EPISODE
         return wa_card, comm_brief, fallback[2]
 
-    async def _generate_grok_briefings(self, prompt: str) -> NarrativeBriefings | None:
+    async def generate_structured(
+        self, prompt: str, response_type: type[T], *, accept: Callable[[T], bool] | None = None
+    ) -> T | None:
+        """Use the configured narrative transport and validate one candidate per attempt."""
+        if self.gemini.api_key:
+            return await self.gemini.generate(prompt, response_type, accept=accept)
+        if not self.api_key:
+            return None
         payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
@@ -315,7 +368,12 @@ class GrokPlannerClient:
                     )
                     if response.status_code == 200:
                         raw = response.json()["choices"][0]["message"]["content"]
-                        return NarrativeBriefings.model_validate_json(raw, strict=True)
+                        return validate_model_response(raw, response_type, accept)
+                    logger.warning(
+                        "grok_generation_failed attempt=%s status=%s",
+                        attempt + 1,
+                        response.status_code,
+                    )
             except (httpx.HTTPError, ValueError, TypeError, KeyError, IndexError) as err:
                 logger.warning(
                     "grok_generation_failed attempt=%s error_type=%s",

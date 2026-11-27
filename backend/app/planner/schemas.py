@@ -5,17 +5,41 @@ metadata contracts, and copy-ready briefing templates.
 """
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.aqi.confidence import ConfidenceResult
 from backend.app.aqi.cpcb import CPCBAQIResult
 from backend.app.aqi.diurnal import DiurnalProfileResult
+from backend.app.config.constants import (
+    DISCLAIMER_CIGARETTE_HEURISTIC,
+    DISCLAIMER_EXPOSURE_BASELINES,
+)
 from backend.app.exposure.cadr import RoomCADRResult, RoomDimensions, RoomIndoorFactors
 from backend.app.exposure.commute import CommuteModeComparison
 from backend.app.exposure.errands import ErrandStop, MergedErrandsResult
 from backend.app.exposure.optimizer import RoutineOptimizationResult, ScheduledActivity
+from backend.app.providers.base import SensorReading
+
+
+class HealthResponse(BaseModel):
+    status: Literal["healthy"] = "healthy"
+    service: Literal["urbero-backend"] = "urbero-backend"
+    timestamp: str
+    environment: str
+
+
+class NearestStationResponse(BaseModel):
+    station_name: str
+    distance_km: float
+    source: str
+    status: Literal["live", "modelled_live", "stale"]
+    is_reference_grade: bool | None
+    observed_at: str
+    readings: list[SensorReading]
+    cpcb_aqi: CPCBAQIResult
+    data_confidence: ConfidenceResult
 
 
 class StationMetadataSchema(BaseModel):
@@ -36,7 +60,7 @@ class MathBreakdownSchema(BaseModel):
 
     formula_name: str
     formula_expression: str
-    inputs: dict[str, Any]
+    inputs: dict[str, str | bool | int | float | None]
     output_value: float | str
     reference_benchmark: str
     scientific_citation: str
@@ -103,6 +127,11 @@ class DailyPlanRequest(BaseModel):
     untrusted_notes: str | None = Field(default=None, max_length=300)
 
 
+class ExposureReferenceLabels(BaseModel):
+    cigarette_heuristic: str = DISCLAIMER_CIGARETTE_HEURISTIC
+    reference_values: str = DISCLAIMER_EXPOSURE_BASELINES
+
+
 class DailyPlanResponse(BaseModel):
     """Complete personalized response with deterministic math and narrative edge."""
 
@@ -122,6 +151,9 @@ class DailyPlanResponse(BaseModel):
     recommendation_cards: list[RecommendationCard] = Field(default_factory=list)
     diurnal_profile: DiurnalProfileResult | None = None
     history_source: str = "Unavailable; schedule timing optimization disabled."
+    exposure_reference_labels: ExposureReferenceLabels = Field(
+        default_factory=ExposureReferenceLabels
+    )
 
 
 class TravelAdviceRequest(BaseModel):

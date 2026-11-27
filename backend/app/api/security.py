@@ -35,10 +35,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         raw_response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         docs = request.url.path in {"/docs", "/docs/oauth2-redirect", "/redoc"}
         script_sources = "'self' https://cdn.jsdelivr.net 'unsafe-inline'" if docs else "'self'"
+        style_sources = "'self' 'unsafe-inline'"
+        font_sources = "'self'"
+        image_sources = "'self' data:"
+        if docs:
+            style_sources += " https://cdn.jsdelivr.net"
+            image_sources += " https://fastapi.tiangolo.com"
+        if request.url.path == "/redoc":
+            style_sources += " https://fonts.googleapis.com"
+            font_sources += " https://fonts.gstatic.com"
         raw_response.headers["Content-Security-Policy"] = (
             f"default-src 'self'; script-src {script_sources}; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
-            "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://fastapi.tiangolo.com; "
+            f"style-src {style_sources}; font-src {font_sources}; img-src {image_sources}; "
             "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         )
         return raw_response

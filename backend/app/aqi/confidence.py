@@ -30,6 +30,32 @@ class ConfidenceResult(BaseModel):
     reason: str
 
 
+def _distance_score(distance_km: float) -> tuple[int, str]:
+    if distance_km <= 5.0:
+        return 40, f"Station is nearby ({distance_km:.1f} km)"
+    if distance_km <= 15.0:
+        return 25, f"Station is moderately close ({distance_km:.1f} km)"
+    return 10, f"Far station ({distance_km:.1f} km)"
+
+
+def _freshness_score(observed_at: datetime, fetched_at: datetime) -> tuple[int, str]:
+    age_minutes = max(0.0, (fetched_at - observed_at).total_seconds()) / 60.0
+    if age_minutes <= 60.0:
+        return 30, f"fresh reading ({int(age_minutes)} mins ago)"
+    if age_minutes <= 180.0:
+        return 15, f"moderately aged reading ({int(age_minutes)} mins ago)"
+    return 0, f"stale reading ({int(age_minutes // 60)} hours ago)"
+
+
+def _completeness_score(pollutants_present: list[str]) -> tuple[int, str]:
+    count = len(pollutants_present)
+    if count < 3 or not {"PM2.5", "PM10"}.intersection(pollutants_present):
+        return 0, "incomplete pollutant telemetry"
+    if count == 3:
+        return 10, "basic 3 pollutants available"
+    return 20, f"{count} pollutants tracked including PM"
+
+
 def calculate_data_confidence(inp: ConfidenceInput) -> ConfidenceResult:
     """Calculate Data Confidence (High / Medium / Low) with an auditable explanation.
 
@@ -39,45 +65,11 @@ def calculate_data_confidence(inp: ConfidenceInput) -> ConfidenceResult:
     - Completeness: >= 4 pollutants with PM (20 pts), 3 with PM (10 pts), < 3 (0 pts)
     - Hardware: Reference-grade regulatory monitor (+10 pts)
     """
-    score = 0
-    reasons: list[str] = []
-
-    # 1. Proximity score (Max 40)
-    if inp.distance_km <= 5.0:
-        score += 40
-        reasons.append(f"Station is nearby ({inp.distance_km:.1f} km)")
-    elif inp.distance_km <= 15.0:
-        score += 25
-        reasons.append(f"Station is moderately close ({inp.distance_km:.1f} km)")
-    else:
-        score += 10
-        reasons.append(f"Far station ({inp.distance_km:.1f} km)")
-
-    # 2. Reading Freshness (Max 30)
-    age_seconds = max(0.0, (inp.fetched_at - inp.observed_at).total_seconds())
-    age_minutes = age_seconds / 60.0
-
-    if age_minutes <= 60.0:
-        score += 30
-        reasons.append(f"fresh reading ({int(age_minutes)} mins ago)")
-    elif age_minutes <= 180.0:
-        score += 15
-        reasons.append(f"moderately aged reading ({int(age_minutes)} mins ago)")
-    else:
-        reasons.append(f"stale reading ({int(age_minutes // 60)} hours ago)")
-
-    # 3. Parameter Completeness (Max 20)
-    has_pm = any(p in {"PM2.5", "PM10"} for p in inp.pollutants_present)
-    param_count = len(inp.pollutants_present)
-
-    if param_count >= 4 and has_pm:
-        score += 20
-        reasons.append(f"{param_count} pollutants tracked including PM")
-    elif param_count >= 3 and has_pm:
-        score += 10
-        reasons.append("basic 3 pollutants available")
-    else:
-        reasons.append("incomplete pollutant telemetry")
+    distance_score, distance_reason = _distance_score(inp.distance_km)
+    freshness_score, freshness_reason = _freshness_score(inp.observed_at, inp.fetched_at)
+    completeness_score, completeness_reason = _completeness_score(inp.pollutants_present)
+    score = distance_score + freshness_score + completeness_score
+    reasons = [distance_reason, freshness_reason, completeness_reason]
 
     # 4. Sensor Classification (Max 10)
     if inp.is_reference_grade is True:

@@ -32,12 +32,20 @@ export const MathDrawer: React.FC<MathDrawerProps> = ({
           <span aria-hidden="true">📐</span>
           <span>{title}</span>
         </span>
-        <span className="flex items-center gap-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+        <span className="flex items-center gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
           <span>{isOpen ? "Hide Math" : "Expand Math"}</span>
           {isOpen ? (
-            <ChevronUp className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
+            <ChevronUp
+              className="w-4 h-4"
+              strokeWidth={1.75}
+              aria-hidden="true"
+            />
           ) : (
-            <ChevronDown className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
+            <ChevronDown
+              className="w-4 h-4"
+              strokeWidth={1.75}
+              aria-hidden="true"
+            />
           )}
         </span>
       </button>

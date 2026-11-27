@@ -4,17 +4,20 @@ import logging
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter, FastAPI, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.staticfiles import StaticFiles
 from slowapi.middleware import SlowAPIMiddleware
 
+from backend.app.api.daily_plan import (
+    InfeasibleErrandLoop,
+    advisory_index,
+    assemble_daily_plan,
+    reading_evidence,
+)
 from backend.app.api.locations import router as locations_router
 from backend.app.api.security import limiter, sanitize_user_input, setup_security
-from backend.app.aqi.confidence import ConfidenceInput, calculate_data_confidence
-from backend.app.aqi.cpcb import CPCBAQIResult, calculate_cpcb_aqi, calculate_sub_index
-from backend.app.aqi.diurnal import compute_diurnal_profile
+from backend.app.aqi.cpcb import CPCBAQIResult, calculate_cpcb_aqi
 from backend.app.config.constants import DISCLAIMER_SMOG_EPISODE
 from backend.app.exposure.cadr import (
     RoomCADRResult,
@@ -29,15 +32,15 @@ from backend.app.exposure.dose import (
     calculate_inhaled_dose,
 )
 from backend.app.exposure.errands import ErrandStop, MergedErrandsResult, optimize_errands
-from backend.app.exposure.optimizer import optimize_daily_routine
 from backend.app.exposure.transit import has_metro
 from backend.app.planner.grok import GrokPlannerClient
 from backend.app.planner.schemas import (
     DailyPlanRequest,
     DailyPlanResponse,
+    HealthResponse,
     ModelledForecastResponse,
+    NearestStationResponse,
     RoomVisionExtraction,
-    StationMetadataSchema,
     TravelAdviceRequest,
     TravelAdviceResponse,
 )
@@ -57,10 +60,12 @@ grok_client = GrokPlannerClient()
 
 async def _get_pollutants(
     latitude: float, longitude: float
-) -> tuple[SensorReading, dict[str, float]]:
+) -> tuple[list[SensorReading], dict[str, float]]:
     try:
         readings = await air_quality.get_latest_readings(latitude, longitude)
-        return readings[0], {reading.parameter: reading.value for reading in readings}
+        if not readings:
+            raise ValueError("No provider readings.")
+        return readings, {reading.parameter: reading.value for reading in readings}
     except Exception as err:
         logger.warning("plan_data_unavailable error_type=%s", type(err).__name__)
         raise HTTPException(
@@ -69,14 +74,12 @@ async def _get_pollutants(
 
 
 @router.get("/health")
-async def health_check() -> dict[str, Any]:
+async def health_check() -> HealthResponse:
     """Health check endpoint for Cloud Run container probes."""
-    return {
-        "status": "healthy",
-        "service": "urbero-backend",
-        "timestamp": datetime.now(UTC).isoformat(),
-        "environment": os.getenv("ENVIRONMENT", "production"),
-    }
+    return HealthResponse(
+        timestamp=datetime.now(UTC).isoformat(),
+        environment=os.getenv("ENVIRONMENT", "production"),
+    )
 
 
 @router.get("/stations/nearest")
@@ -85,42 +88,22 @@ async def get_nearest_station_readings(
     request: Request,
     lat: float = Query(..., ge=-90.0, le=90.0, description="Latitude"),
     lon: float = Query(..., ge=-180.0, le=180.0, description="Longitude"),
-) -> dict[str, Any]:
+) -> NearestStationResponse:
     """Fetch nearest station readings, calculate CPCB AQI, and score data confidence."""
-    try:
-        readings = await air_quality.get_latest_readings(lat, lon)
-    except Exception as err:
-        logger.warning("air_quality_unavailable error_type=%s", type(err).__name__)
-        raise HTTPException(
-            status_code=503, detail="Air quality is temporarily unavailable. Please retry."
-        ) from err
-
-    readings_dict = {r.parameter: r.value for r in readings}
+    readings, pollutants = await _get_pollutants(lat, lon)
     first = readings[0]
-
-    aqi_res = calculate_cpcb_aqi(readings_dict)
-    conf_res = calculate_data_confidence(
-        ConfidenceInput(
-            distance_km=first.distance_km,
-            observed_at=first.observed_at,
-            fetched_at=first.fetched_at,
-            pollutants_present=list(readings_dict.keys()),
-            is_reference_grade=first.is_reference_grade,
-            is_modelled="Modelled" in first.source,
-        )
+    aqi, confidence = reading_evidence(first, pollutants)
+    return NearestStationResponse(
+        station_name=first.station,
+        distance_km=first.distance_km,
+        source=first.source,
+        status=first.status,
+        is_reference_grade=first.is_reference_grade,
+        observed_at=first.observed_at.isoformat(),
+        readings=readings,
+        cpcb_aqi=aqi,
+        data_confidence=confidence,
     )
-
-    return {
-        "station_name": first.station,
-        "distance_km": first.distance_km,
-        "source": first.source,
-        "status": first.status,
-        "is_reference_grade": first.is_reference_grade,
-        "observed_at": first.observed_at.isoformat(),
-        "readings": [r.model_dump() for r in readings],
-        "cpcb_aqi": aqi_res.model_dump(),
-        "data_confidence": conf_res.model_dump(),
-    }
 
 
 @router.post("/aqi/calculate", response_model=CPCBAQIResult)
@@ -160,15 +143,10 @@ async def advise_commute(request: Request, travel: TravelAdviceRequest) -> Trave
     question = sanitize_user_input(travel.question)
     if not question:
         raise HTTPException(status_code=422, detail="Enter a travel question.")
-    station, pollutants = await _get_pollutants(travel.latitude, travel.longitude)
+    readings, pollutants = await _get_pollutants(travel.latitude, travel.longitude)
     pm25 = pollutants["PM2.5"]
     aqi = calculate_cpcb_aqi(pollutants)
-    index = (
-        aqi.overall_aqi
-        if aqi.is_valid
-        else (aqi.indicative_aqi or calculate_sub_index("PM2.5", pm25))
-    )
-    smog = index > 300
+    smog = advisory_index(aqi, pm25) > 300
     options = compare_commute_modes(
         travel.distance_km, pm25, include_metro=has_metro(travel.latitude, travel.longitude)
     )
@@ -176,7 +154,7 @@ async def advise_commute(request: Request, travel: TravelAdviceRequest) -> Trave
         option for option in options if not smog or option.mode not in {"walking", "cycling"}
     ]
     choice = await grok_client.choose_travel_mode(
-        question, eligible, pm25, station.status, smog, aqi_category=aqi.category
+        question, eligible, pm25, readings[0].status, smog, aqi_category=aqi.category
     )
     by_mode = {option.mode: option for option in eligible}
     return TravelAdviceResponse(
@@ -213,130 +191,13 @@ async def optimize_errands_endpoint(
 @router.post("/plan", response_model=DailyPlanResponse)
 @limiter.limit("20/minute")
 async def generate_daily_plan(request: Request, plan_req: DailyPlanRequest) -> DailyPlanResponse:
-    """End-to-end personalized daily plan: deterministic calculations with GenAI edge narrative."""
-    # 1. Fetch live or cached station readings
-    first, readings_dict = await _get_pollutants(plan_req.latitude, plan_req.longitude)
-
-    # 2. Deterministic Core Computations
-    aqi_res = calculate_cpcb_aqi(readings_dict)
-    conf_res = calculate_data_confidence(
-        ConfidenceInput(
-            distance_km=first.distance_km,
-            observed_at=first.observed_at,
-            fetched_at=first.fetched_at,
-            pollutants_present=list(readings_dict.keys()),
-            is_reference_grade=first.is_reference_grade,
-            is_modelled="Modelled" in first.source,
-        )
-    )
-
-    # Archived CAMS hours are modelled, never fabricated or labelled station history.
-    diurnal = None
-    history_source = "Unavailable; schedule timing optimization disabled."
-    pm25 = readings_dict["PM2.5"]
-    hourly_pm25 = {}
+    readings, pollutants = await _get_pollutants(plan_req.latitude, plan_req.longitude)
     try:
-        history = await openmeteo_provider.get_history(plan_req.latitude, plan_req.longitude)
-        diurnal = compute_diurnal_profile("Open-Meteo CAMS model grid", history)
-        hourly_pm25 = {h.hour: h.avg_pm25 for h in diurnal.hourly_curve if h.sample_count}
-        history_source = "Open-Meteo CAMS (Modelled) — last 72h archived model output, not empirical station history."
-    except Exception as err:
-        logger.warning("history_unavailable error_type=%s", type(err).__name__)
-
-    # Optimize activities
-    routine_res = optimize_daily_routine(
-        plan_req.activities,
-        hourly_pm25,
-        current_aqi=aqi_res.overall_aqi
-        if aqi_res.is_valid
-        else (aqi_res.indicative_aqi or calculate_sub_index("PM2.5", pm25)),
-        current_pm25=pm25,
-    )
-
-    # Commute comparison
-    commute_res = compare_commute_modes(
-        plan_req.commute_distance_km,
-        ambient_pm25_ug_m3=pm25,
-        include_metro=has_metro(plan_req.latitude, plan_req.longitude),
-    )
-
-    # Room CADR guidance
-    cadr_res = calculate_room_cadr(plan_req.room_dimensions, plan_req.indoor_factors)
-
-    # Errands optimization
-    try:
-        errands_res = (
-            optimize_errands(
-                plan_req.errands,
-                cleanest_window_start_hour=float(diurnal.cleanest_window_start)
-                if diurnal and diurnal.cleanest_window_end > diurnal.cleanest_window_start
-                else 6,
-                cleanest_window_end_hour=float(diurnal.cleanest_window_end)
-                if diurnal and diurnal.cleanest_window_end > diurnal.cleanest_window_start
-                else 22,
-                peak_smog_avg_pm25=diurnal.peak_smog_avg_pm25 if diurnal else pm25,
-                cleanest_window_avg_pm25=diurnal.cleanest_window_avg_pm25 if diurnal else pm25,
-            )
-            if plan_req.errands
-            else None
+        return await assemble_daily_plan(
+            plan_req, readings[0], pollutants, openmeteo_provider, grok_client
         )
-    except ValueError as err:
-        raise HTTPException(
-            status_code=422,
-            detail="No feasible errand loop in the available window. Adjust stop times.",
-        ) from err
-
-    # Station metadata
-    st_meta = StationMetadataSchema(
-        source=first.source,
-        station=first.station,
-        distance_km=first.distance_km,
-        observed_at=first.observed_at,
-        fetched_at=first.fetched_at,
-        status=first.status,
-        is_reference_grade=first.is_reference_grade,
-        conversion_note=first.conversion_note,
-    )
-
-    # 3. GenAI Edge: Briefings & Cards
-    clean_notes = sanitize_user_input(plan_req.untrusted_notes or "")
-    wa_card, comm_brief, cards = await grok_client.generate_plan_briefings(
-        city=plan_req.city,
-        station=st_meta,
-        aqi=aqi_res,
-        confidence=conf_res,
-        routine=routine_res,
-        commute_options=commute_res,
-        cadr=cadr_res,
-        errands=errands_res,
-        language=plan_req.language_preference,
-        untrusted_notes=clean_notes,
-    )
-    location_label = " ".join(sanitize_user_input(plan_req.city).split())
-    wa_card.formatted_message = f"Location: {location_label}\n\n{wa_card.formatted_message}"
-
-    for card in cards:
-        card.math_breakdown.inputs["pollutant_conversion"] = first.conversion_note
-        card.math_breakdown.inputs["history_source"] = history_source
-
-    return DailyPlanResponse(
-        medical_disclaimer=routine_res.smog_episode_advisory,
-        timestamp=datetime.now(UTC),
-        city=plan_req.city,
-        station_metadata=st_meta,
-        aqi_result=aqi_res,
-        data_confidence=conf_res,
-        smog_episode_active=routine_res.smog_episode_active,
-        routine_optimization=routine_res,
-        commute_comparisons=commute_res,
-        room_cadr_guidance=cadr_res,
-        errand_merger=errands_res,
-        whatsapp_card=wa_card,
-        community_brief=comm_brief,
-        recommendation_cards=cards,
-        diurnal_profile=diurnal,
-        history_source=history_source,
-    )
+    except InfeasibleErrandLoop as err:
+        raise HTTPException(status_code=422, detail=str(err)) from err
 
 
 @router.post("/planner/vision", response_model=RoomVisionExtraction)

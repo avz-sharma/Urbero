@@ -96,6 +96,52 @@ async def test_coalesced_fallback_to_stale_on_fetch_failure() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cancelling_leader_during_l2_fallback_releases_follower(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    l2_read_started = asyncio.Event()
+    follower_started = asyncio.Event()
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            l2_read_started.set()
+            await asyncio.Event().wait()
+        return httpx.Response(201)
+
+    monkeypatch.setenv("SUPABASE_URL", "https://mock.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "mock-key")
+    client = httpx.AsyncClient
+    transport = httpx.MockTransport(respond)
+    monkeypatch.setattr(
+        httpx, "AsyncClient", lambda **kwargs: client(transport=transport, **kwargs)
+    )
+    cache = MultiTierCache()
+
+    async def fail_to_fetch() -> list[SensorReading]:
+        raise RuntimeError("upstream unavailable")
+
+    async def fetch_after_retry() -> list[SensorReading]:
+        return [_make_dummy_reading(val=69)]
+
+    async def follow_leader() -> list[SensorReading]:
+        follower_started.set()
+        return await cache.get_coalesced(28.61, 77.21, fail_to_fetch)
+
+    leader = asyncio.create_task(cache.get_coalesced(28.61, 77.21, fail_to_fetch))
+    await asyncio.wait_for(l2_read_started.wait(), timeout=1)
+    follower = asyncio.create_task(follow_leader())
+    await asyncio.wait_for(follower_started.wait(), timeout=1)
+    leader.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await leader
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(follower, timeout=0.2)
+
+    fresh = await cache.get_coalesced(28.61, 77.21, fetch_after_retry)
+    assert fresh[0].value == 69
+
+
+@pytest.mark.asyncio
 async def test_supabase_l2_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test Supabase L2 cache lookup and error handling."""
     cache = MultiTierCache()

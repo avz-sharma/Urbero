@@ -115,7 +115,8 @@ def test_optimize_errands_endpoint(client: TestClient) -> None:
     assert data["tailpipe_co2_saved_grams"] > 0
 
 
-def test_generate_daily_plan_smoke(client: TestClient) -> None:
+@pytest.mark.parametrize("path", ["/api/plan", "/api/plan/daily"])
+def test_generate_daily_plan_smoke(client: TestClient, path: str) -> None:
     """E2E smoke test for POST /api/plan/daily."""
     payload = {
         "city": "Delhi",
@@ -164,7 +165,7 @@ def test_generate_daily_plan_smoke(client: TestClient) -> None:
         ),
         patch("backend.app.api.routes.openmeteo_provider", model),
     ):
-        response = client.post("/api/plan/daily", json=payload)
+        response = client.post(path, json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["city"] == "Delhi"
@@ -172,6 +173,10 @@ def test_generate_daily_plan_smoke(client: TestClient) -> None:
     assert "whatsapp_card" in data
     assert "community_brief" in data
     assert len(data["recommendation_cards"]) >= 3
+    assert data["errand_merger"]["emissions_factor_g_per_km"] == 48
+    assert data["room_cadr_guidance"]["dimensions"] == payload["room_dimensions"]
+    assert "communication heuristic" in data["exposure_reference_labels"]["cigarette_heuristic"]
+    assert "reference values" in data["exposure_reference_labels"]["reference_values"]
 
 
 def test_planner_vision_endpoint(client: TestClient) -> None:

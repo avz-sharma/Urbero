@@ -5,14 +5,13 @@ import {
   CalendarClock,
   Wind,
   FileText,
-  Route,
-  Navigation,
   MapPin,
   type LucideIcon,
 } from "lucide-react";
 import type {
   ActiveLocation,
   DailyPlanResponse,
+  ErrandStop,
   RoomCADRResult,
   RoomDimensions,
   RoomIndoorFactors,
@@ -23,7 +22,8 @@ import { LowEmissionRoutine, BriefingCards } from "../LowEmissionRoutine";
 import { IndoorAirGuide } from "../IndoorAirGuide";
 import { ImpactJustification } from "../ImpactJustification";
 import { snappySpring } from "../lib/motion";
-import { MathDrawer } from "../common/MathDrawer";
+import { ErrandLoop } from "../LowEmissionRoutine/ErrandLoop";
+import { ErrandEditor } from "../LowEmissionRoutine/ErrandEditor";
 import { RecommendationCards } from "../common/RecommendationCards";
 import { ScheduleEditor } from "../LowEmissionRoutine/ScheduleEditor";
 import { TravelAdvice } from "../LowEmissionRoutine/TravelAdvice";
@@ -36,6 +36,11 @@ export interface DashboardShellProps {
   activities?: ScheduledActivity[];
   onApplySchedule?: (activities: ScheduledActivity[]) => void;
   updatingSchedule?: boolean;
+  errands?: ErrandStop[];
+  onApplyErrands?: (stops: ErrandStop[]) => void;
+  errandError?: string | null;
+  roomError?: string | null;
+  onRetryRoom?: () => void;
   cadrGuidance: RoomCADRResult;
   onRecalculateCADR: (
     dimensions: RoomDimensions,
@@ -86,6 +91,11 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   activities = [],
   onApplySchedule,
   updatingSchedule = false,
+  errands = [],
+  onApplyErrands,
+  errandError = null,
+  roomError = null,
+  onRetryRoom,
   cadrGuidance,
   onRecalculateCADR,
 }) => {
@@ -248,9 +258,18 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
             <div className="space-y-6">
               {onApplySchedule && (
                 <ScheduleEditor
+                  key={selectedPreset?.id ?? "custom"}
                   activities={activities}
                   onApply={onApplySchedule}
                   busy={updatingSchedule}
+                />
+              )}
+              {onApplyErrands && (
+                <ErrandEditor
+                  stops={errands}
+                  onApply={onApplyErrands}
+                  busy={updatingSchedule}
+                  serverError={errandError}
                 />
               )}
               <TravelAdvice
@@ -267,99 +286,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                 ) &&
                   " Metro operates in this urban area. Check whether it serves your trip."}
               </p>
-              {/* Errand Consolidation Loop Card (if present) */}
-              {errandsResult && (
-                <div className="p-5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-xs space-y-4">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="p-1 rounded-lg bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-400">
-                        <Route
-                          className="w-4 h-4"
-                          strokeWidth={1.75}
-                          aria-hidden="true"
-                        />
-                      </span>
-                      <h3 className="text-sm font-bold text-[var(--text-primary)]">
-                        Errand Consolidation Loop (
-                        {errandsResult.ordered_stops.length} Stops)
-                      </h3>
-                    </div>
-                    <span className="px-3 py-1 text-xs font-bold rounded-full bg-teal-100 text-teal-900 dark:bg-teal-900/60 dark:text-teal-200 border border-teal-200 dark:border-teal-800 tabular-nums">
-                      ↓ {errandsResult.pm25_dose_reduction_percent}% PM2.5
-                      Inhalation Reduced
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="p-3 bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-subtle)]">
-                      <div className="text-xs text-[var(--text-secondary)]">
-                        Optimized Loop Distance
-                      </div>
-                      <div className="text-lg font-bold text-[var(--text-primary)] mt-0.5 font-mono tabular-nums">
-                        {errandsResult.merged_loop_distance_km} km
-                        <span className="text-xs text-teal-700 dark:text-teal-400 font-semibold ml-1">
-                          (saved {errandsResult.distance_saved_km} km)
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="p-3 bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-subtle)]">
-                      <div className="text-xs text-[var(--text-secondary)]">
-                        Tailpipe CO₂ Avoided
-                      </div>
-                      <div className="text-lg font-bold text-teal-700 dark:text-teal-400 mt-0.5 font-mono tabular-nums">
-                        {errandsResult.tailpipe_co2_saved_grams} g
-                      </div>
-                    </div>
-
-                    <div className="p-3 bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-subtle)]">
-                      <div className="text-xs text-[var(--text-secondary)]">
-                        Clean-Air Time Window
-                      </div>
-                      <div className="text-lg font-bold text-teal-800 dark:text-teal-300 mt-0.5 font-mono tabular-nums">
-                        {Math.floor(errandsResult.recommended_start_hour)}:00 –{" "}
-                        {Math.floor(errandsResult.recommended_end_hour)}:30
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="text-xs font-semibold text-[var(--text-secondary)] mb-2">
-                      Optimized Stop Sequence:
-                    </div>
-                    <ol className="flex flex-wrap items-center gap-2 text-xs">
-                      {errandsResult.ordered_stops.map((stop, index) => (
-                        <li key={stop.id} className="flex items-center gap-2">
-                          <span className="px-3 py-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] font-medium rounded-lg shadow-2xs">
-                            {index + 1}. {stop.name} ({stop.duration_minutes}{" "}
-                            min)
-                          </span>
-                          {index < errandsResult.ordered_stops.length - 1 && (
-                            <Navigation
-                              className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0 rotate-90"
-                              aria-hidden="true"
-                            />
-                          )}
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-
-                  <MathDrawer title="Show the Math: Errand Permutation & Tailpipe CO₂ Factors">
-                    <p>
-                      <strong>Brute-Force Permutations:</strong> Evaluates all{" "}
-                      {errandsResult.ordered_stops.length}! = 24 travel routes
-                      respecting fixed opening/closing shop windows and school
-                      dismissal.
-                    </p>
-                    <code className="block bg-[var(--bg-surface)] p-2 rounded border border-[var(--border-subtle)] font-mono tabular-nums text-[var(--text-primary)]">
-                      CO₂ Saved = Total Separate Trip Distance (
-                      {errandsResult.distance_saved_km} km) × Tailpipe Factor
-                      (160 g/km auto-rickshaw/hatchback)
-                    </code>
-                  </MathDrawer>
-                </div>
-              )}
+              {errandsResult && <ErrandLoop result={errandsResult} />}
 
               {/* Diurnal Schedule & Commute Matrix (Smog banner deduplicated in Tab 1, Briefings in Tab 4) */}
               <p className="text-sm text-[var(--text-secondary)]">
@@ -381,8 +308,9 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           {activeTab === 2 && (
             <IndoorAirGuide
               initialGuidance={cadrGuidance}
-              initialDimensions={selectedPreset?.room_dimensions}
-              initialFactors={selectedPreset?.indoor_factors}
+              key={selectedPreset?.id ?? "custom"}
+              error={roomError}
+              onRetry={onRetryRoom}
               onRecalculate={onRecalculateCADR}
             />
           )}
@@ -421,7 +349,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                 aqiData={planData.aqi_result}
                 stationMetadata={planData.station_metadata}
                 dataConfidence={planData.data_confidence}
-                errandsResult={null}
+                exposureLabels={planData.exposure_reference_labels}
                 variant="details"
               />
             </div>
@@ -429,10 +357,12 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           <RecommendationCards
             cards={(planData.recommendation_cards ?? []).filter(
               (card) =>
-                activeTab === 0 ||
-                (activeTab === 1 && card.pillar === "routine") ||
-                (activeTab === 2 && card.pillar === "indoor") ||
-                (activeTab === 3 && card.pillar === "impact"),
+                (card.pillar !== "indoor" ||
+                  cadrGuidance === planData.room_cadr_guidance) &&
+                (activeTab === 0 ||
+                  (activeTab === 1 && card.pillar === "routine") ||
+                  (activeTab === 2 && card.pillar === "indoor") ||
+                  (activeTab === 3 && card.pillar === "impact")),
             )}
           />
         </m.div>

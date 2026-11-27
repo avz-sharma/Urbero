@@ -1,10 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { LazyMotion, domAnimation, MotionConfig } from "motion/react";
 import { Sun, Moon } from "lucide-react";
-import {
-  INDIAN_PRESETS,
-  type PresetProfile,
-} from "./HouseholdProfile";
+import { INDIAN_PRESETS, type PresetProfile } from "./HouseholdProfile";
 import { useTheme } from "./lib/useTheme";
 import { LightRays } from "./components/ui/LightRays";
 import { LandingView } from "./components/LandingView";
@@ -14,6 +11,7 @@ import type {
   ActiveLocation,
   DailyPlanRequest,
   DailyPlanResponse,
+  ErrandStop,
   RoomCADRResult,
   RoomDimensions,
   RoomIndoorFactors,
@@ -23,6 +21,12 @@ import type {
 export interface AppProps {
   initialView?: "landing" | "dashboard";
 }
+
+type RoomSubmission = {
+  dimensions: RoomDimensions;
+  factors: RoomIndoorFactors;
+  targetAch: number;
+};
 
 export const App = ({ initialView = "landing" }: AppProps) => {
   const [theme, toggleTheme] = useTheme();
@@ -35,9 +39,13 @@ export const App = ({ initialView = "landing" }: AppProps) => {
     INDIAN_PRESETS.find((p) => p.id === selectedPresetId) ?? null;
   const [planData, setPlanData] = useState<DailyPlanResponse | null>(null);
   const [activities, setActivities] = useState<ScheduledActivity[]>([]);
+  const [errands, setErrands] = useState<ErrandStop[]>([]);
+  const acceptedErrands = useRef<ErrandStop[]>([]);
+  const [errandError, setErrandError] = useState<string | null>(null);
   const lastLocation = useRef<ActiveLocation | null>(null);
   const lastSuccessfulLocation = useRef<ActiveLocation | null>(null);
-  const [cadrGuidance, setCADRGuidance] = useState<RoomCADRResult | null>(null);
+  const [roomOverride, setRoomOverride] = useState<RoomCADRResult | null>(null);
+  const [failedRoom, setFailedRoom] = useState<RoomSubmission | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   const [isFetching, setIsFetching] = useState(false);
@@ -46,7 +54,8 @@ export const App = ({ initialView = "landing" }: AppProps) => {
   const mainRef = useRef<HTMLElement>(null);
   const locationGateRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    if (view === "dashboard" && !activeLocation) locationGateRef.current?.focus();
+    if (view === "dashboard" && !activeLocation)
+      locationGateRef.current?.focus();
   }, [view, activeLocation]);
   const cadrSequence = useRef(0);
 
@@ -61,9 +70,11 @@ export const App = ({ initialView = "landing" }: AppProps) => {
     const controller = new AbortController();
     setIsFetching(true);
     setError(null);
+    setErrandError(null);
     if (locationChanged) {
       setPlanData(null);
-      setCADRGuidance(null);
+      setRoomOverride(null);
+      setFailedRoom(null);
     }
     const payload: DailyPlanRequest = {
       city: activeLocation.label.trim().slice(0, 160),
@@ -73,6 +84,7 @@ export const App = ({ initialView = "landing" }: AppProps) => {
       language_preference: "english",
       commute_distance_km: selectedPreset?.commute_distance_km ?? 12,
       activities,
+      errands,
       ...(selectedPreset && {
         room_dimensions: selectedPreset.room_dimensions,
         indoor_factors: selectedPreset.indoor_factors,
@@ -87,15 +99,27 @@ export const App = ({ initialView = "landing" }: AppProps) => {
           signal: controller.signal,
           body: JSON.stringify(payload),
         });
+        if (response.status === 422 && errands.length && !locationChanged) {
+          const errorBody: { detail?: unknown } = await response.json();
+          if (
+            errorBody.detail ===
+              "No feasible errand loop in the available window. Adjust stop times." &&
+            !controller.signal.aborted
+          ) {
+            setErrandError(
+              "No loop fits the stop times. Adjust opening or finish times, or remove a stop and apply again.",
+            );
+            return;
+          }
+        }
         if (!response.ok)
           throw new Error(
             "Air quality is temporarily unavailable. Please retry or choose another location.",
           );
         const data: DailyPlanResponse = await response.json();
         if (controller.signal.aborted) return;
+        acceptedErrands.current = errands;
         setPlanData(data);
-        if (locationChanged) setCADRGuidance(data.room_cadr_guidance);
-        else setCADRGuidance((previous) => previous ?? data.room_cadr_guidance);
         if (previousCategory.current !== data.aqi_result.category) {
           setAnnouncement(
             `Air quality category updated to ${data.aqi_result.category}.`,
@@ -119,6 +143,7 @@ export const App = ({ initialView = "landing" }: AppProps) => {
   }, [
     activeLocation,
     activities,
+    errands,
     selectedPreset,
     selectedPresetId,
     view,
@@ -129,7 +154,15 @@ export const App = ({ initialView = "landing" }: AppProps) => {
     setSelectedPresetId(preset.id);
     setActivities(preset.activities);
     cadrSequence.current += 1;
-    setCADRGuidance(null);
+    setRoomOverride(null);
+    setFailedRoom(null);
+  };
+
+  const selectLocation = (location: ActiveLocation) => {
+    cadrSequence.current += 1;
+    acceptedErrands.current = [];
+    setErrands([]);
+    setActiveLocation(location);
   };
 
   const recalculateCADR = async (
@@ -138,6 +171,7 @@ export const App = ({ initialView = "landing" }: AppProps) => {
     targetAch: number,
   ) => {
     const sequence = ++cadrSequence.current;
+    setFailedRoom(null);
     try {
       const response = await fetch(
         `/api/exposure/cadr?target_ach=${targetAch}`,
@@ -149,10 +183,10 @@ export const App = ({ initialView = "landing" }: AppProps) => {
       );
       if (!response.ok) throw new Error("CADR unavailable");
       const result: RoomCADRResult = await response.json();
-      if (sequence === cadrSequence.current) setCADRGuidance(result);
+      if (sequence === cadrSequence.current) setRoomOverride(result);
     } catch {
       if (sequence === cadrSequence.current)
-        setError("Room sizing could not be updated. Please retry.");
+        setFailedRoom({ dimensions, factors, targetAch });
     }
   };
 
@@ -195,7 +229,7 @@ export const App = ({ initialView = "landing" }: AppProps) => {
                 {activeLocation && (
                   <LocationPicker
                     activeLocation={activeLocation}
-                    onSelectLocation={setActiveLocation}
+                    onSelectLocation={selectLocation}
                     stationDistanceKm={planData?.station_metadata.distance_km}
                     stationStatus={planData?.station_metadata.status}
                     isLoading={isFetching}
@@ -240,7 +274,12 @@ export const App = ({ initialView = "landing" }: AppProps) => {
                 aria-labelledby="location-gate-title"
                 className="max-w-xl mx-auto py-8 space-y-5"
               >
-                <h1 id="location-gate-title" ref={locationGateRef} tabIndex={-1} className="text-3xl font-bold">
+                <h1
+                  id="location-gate-title"
+                  ref={locationGateRef}
+                  tabIndex={-1}
+                  className="text-3xl font-bold"
+                >
                   Choose your location
                 </h1>
                 <p>
@@ -250,7 +289,7 @@ export const App = ({ initialView = "landing" }: AppProps) => {
                 <LocationPicker
                   gate
                   activeLocation={null}
-                  onSelectLocation={setActiveLocation}
+                  onSelectLocation={selectLocation}
                 />
               </section>
             ) : (
@@ -270,17 +309,36 @@ export const App = ({ initialView = "landing" }: AppProps) => {
                 {isFetching && (
                   <p>Loading air quality for {activeLocation.label}…</p>
                 )}
-                {planData && cadrGuidance && (
+                {planData && (
                   <DashboardShell
                     planData={planData}
                     selectedPreset={selectedPreset}
                     onSelectPreset={selectPreset}
                     activeLocation={activeLocation}
                     activities={activities}
-                    onApplySchedule={setActivities}
+                    onApplySchedule={(schedule) => {
+                      setErrands(acceptedErrands.current);
+                      setActivities(schedule);
+                    }}
                     updatingSchedule={isFetching}
-                    cadrGuidance={cadrGuidance}
+                    errands={errands}
+                    onApplyErrands={setErrands}
+                    errandError={errandError}
+                    cadrGuidance={roomOverride ?? planData.room_cadr_guidance}
                     onRecalculateCADR={recalculateCADR}
+                    roomError={
+                      failedRoom ? "Room sizing could not be updated." : null
+                    }
+                    onRetryRoom={
+                      failedRoom
+                        ? () =>
+                            void recalculateCADR(
+                              failedRoom.dimensions,
+                              failedRoom.factors,
+                              failedRoom.targetAch,
+                            )
+                        : undefined
+                    }
                   />
                 )}
               </>

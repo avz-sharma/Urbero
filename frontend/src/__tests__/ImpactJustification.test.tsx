@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { ImpactJustification } from "../ImpactJustification";
+import { DELHI_PLAN_FIXTURE } from "../test/fixtures/dailyPlan";
 import type {
   ConfidenceResult,
   CPCBAQIResult,
@@ -39,7 +40,7 @@ const MOCK_AQI: CPCBAQIResult = {
 
 const MOCK_STATION: StationMetadataSchema = {
   source: "WAQI / CPCB",
-    conversion_note: "WAQI inverse PM reconstruction; estimate only.",
+  conversion_note: "WAQI inverse PM reconstruction; estimate only.",
   station: "Anand Vihar, Delhi - DPCC",
   distance_km: 3.8,
   observed_at: new Date().toISOString(),
@@ -81,6 +82,7 @@ const MOCK_ERRANDS: MergedErrandsResult = {
   merged_loop_distance_km: 6.8,
   distance_saved_km: 5.2,
   travel_mode: "auto_rickshaw",
+  emissions_factor_g_per_km: 160,
   tailpipe_co2_saved_grams: 832,
   baseline_inhaled_pm25_ug: 40.0,
   optimized_inhaled_pm25_ug: 15.0,
@@ -96,7 +98,7 @@ describe("ImpactJustification Component", () => {
         stationMetadata={MOCK_STATION}
         dataConfidence={MOCK_CONFIDENCE}
         errandsResult={MOCK_ERRANDS}
-      />
+      />,
     );
 
     expect(screen.getAllByText("345").length).toBeGreaterThanOrEqual(1);
@@ -112,7 +114,7 @@ describe("ImpactJustification Component", () => {
         stationMetadata={MOCK_STATION}
         dataConfidence={MOCK_CONFIDENCE}
         errandsResult={MOCK_ERRANDS}
-      />
+      />,
     );
 
     expect(screen.getByText("165 µg/m³")).toBeInTheDocument();
@@ -126,7 +128,7 @@ describe("ImpactJustification Component", () => {
         stationMetadata={MOCK_STATION}
         dataConfidence={MOCK_CONFIDENCE}
         errandsResult={MOCK_ERRANDS}
-      />
+      />,
     );
 
     expect(screen.getByText(/5.2/)).toBeInTheDocument();
@@ -144,16 +146,30 @@ describe("ImpactJustification Component", () => {
         stationMetadata={MOCK_STATION}
         dataConfidence={MOCK_CONFIDENCE}
         errandsResult={MOCK_ERRANDS}
-      />
+        exposureLabels={DELHI_PLAN_FIXTURE.exposure_reference_labels}
+      />,
     );
 
-    const mathBtn = screen.getByRole("button", { name: /Show the Math: CPCB Linear Breakpoint Formula/i });
+    const mathBtn = screen.getByRole("button", {
+      name: /Show the Math: CPCB Linear Breakpoint Formula/i,
+    });
     await user.click(mathBtn);
 
-    expect(screen.getByText(/Berkeley Earth Cigarette Heuristic/i)).toBeInTheDocument();
-    expect(screen.getByText(/public communication heuristic/i)).toBeInTheDocument();
-    expect(screen.getByText(/Regulatory Reference Baselines/i)).toBeInTheDocument();
-    expect(screen.getByText(/NEVER a "personal safe budget"/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Berkeley Earth Cigarette Heuristic/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/public communication heuristic/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/WHO and India NAAQS reference values/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/not a personal 'safe pollution budget'/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/in terms of inhaled mass/i),
+    ).not.toBeInTheDocument();
   });
 
   it("has zero accessibility violations via jest-axe", async () => {
@@ -163,7 +179,7 @@ describe("ImpactJustification Component", () => {
         stationMetadata={MOCK_STATION}
         dataConfidence={MOCK_CONFIDENCE}
         errandsResult={MOCK_ERRANDS}
-      />
+      />,
     );
 
     const results = await axe(container);

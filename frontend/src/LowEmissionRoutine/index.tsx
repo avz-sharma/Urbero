@@ -222,7 +222,12 @@ export const LowEmissionRoutine: React.FC<LowEmissionRoutineProps> = ({
             {routineResult.overall_advisory}
           </p>
 
-          <div className="overflow-x-auto rounded-lg border border-[var(--border-subtle)]">
+          <div
+            role="region"
+            aria-label="Household activity comparison"
+            tabIndex={0}
+            className="overflow-x-auto rounded-lg border border-[var(--border-subtle)] focus-visible:outline-2 focus-visible:outline-teal-600"
+          >
             <table className="w-full text-left text-xs border-collapse">
               <caption className="sr-only">
                 Household member activities before and after diurnal
@@ -328,7 +333,7 @@ export const LowEmissionRoutine: React.FC<LowEmissionRoutineProps> = ({
               aria-pressed={commuteView === "table"}
               className={`min-h-[44px] px-2.5 py-1 text-xs font-semibold rounded-md transition-colors inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer ${
                 commuteView === "table"
-                  ? "bg-teal-700 text-white dark:bg-teal-600"
+                  ? "bg-teal-700 text-white"
                   : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               }`}
             >
@@ -345,7 +350,7 @@ export const LowEmissionRoutine: React.FC<LowEmissionRoutineProps> = ({
               aria-pressed={commuteView === "visual"}
               className={`min-h-[44px] px-2.5 py-1 text-xs font-semibold rounded-md transition-colors inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer ${
                 commuteView === "visual"
-                  ? "bg-teal-700 text-white dark:bg-teal-600"
+                  ? "bg-teal-700 text-white"
                   : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               }`}
             >
@@ -361,7 +366,16 @@ export const LowEmissionRoutine: React.FC<LowEmissionRoutineProps> = ({
 
         {/* Semantic HTML Table View (Always available for screen readers & table tab) */}
         <div
-          className={`overflow-x-auto rounded-lg border border-[var(--border-subtle)] ${commuteView === "visual" ? "sr-only" : "block"}`}
+          role={commuteView === "table" ? "region" : undefined}
+          aria-label={
+            commuteView === "table" ? "Commute mode comparison" : undefined
+          }
+          tabIndex={commuteView === "table" ? 0 : undefined}
+          className={
+            commuteView === "visual"
+              ? "sr-only"
+              : "overflow-x-auto rounded-lg border border-[var(--border-subtle)] focus-visible:outline-2 focus-visible:outline-teal-600"
+          }
         >
           <table className="w-full text-left text-xs border-collapse">
             <caption className="sr-only">

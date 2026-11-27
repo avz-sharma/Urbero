@@ -12,24 +12,29 @@ import App from "../App";
 import { DELHI_PLAN_FIXTURE } from "../test/fixtures/dailyPlan";
 
 describe("App Integration & Accessibility", () => {
-  it.each(["light", "dark"])("passes automated accessibility checks across the workspace in %s mode", async (theme) => {
-    localStorage.setItem("urbero-theme", theme);
-    const user = userEvent.setup();
-    const { container } = render(<App />);
-    expect(await axe(container)).toHaveNoViolations();
-    await user.click(screen.getByRole("button", { name: /Get Started/i }));
-    expect(screen.getByRole("heading", { name: /Choose your location/i })).toHaveFocus();
-    expect(await axe(container)).toHaveNoViolations();
-    await user.click(screen.getByRole("button", { name: /^Noida$/i }));
-    for (const name of [/Overview/i, /Routine/i, /Indoor/i, /Briefings/i]) {
-      await user.click(await screen.findByRole("tab", { name }));
-      const tab = screen.getByRole("tab", { name });
-      const panel = await screen.findByRole("tabpanel", { name });
-      expect(panel.id).toBe(tab.getAttribute("aria-controls"));
+  it.each(["light", "dark"])(
+    "passes automated accessibility checks across the workspace in %s mode",
+    async (theme) => {
+      localStorage.setItem("urbero-theme", theme);
+      const user = userEvent.setup();
+      const { container } = render(<App />);
       expect(await axe(container)).toHaveNoViolations();
-    }
-    localStorage.removeItem("urbero-theme");
-  });
+      await user.click(screen.getByRole("button", { name: /Get Started/i }));
+      expect(
+        screen.getByRole("heading", { name: /Choose your location/i }),
+      ).toHaveFocus();
+      expect(await axe(container)).toHaveNoViolations();
+      await user.click(screen.getByRole("button", { name: /^Noida$/i }));
+      for (const name of [/Overview/i, /Routine/i, /Indoor/i, /Briefings/i]) {
+        await user.click(await screen.findByRole("tab", { name }));
+        const tab = screen.getByRole("tab", { name });
+        const panel = await screen.findByRole("tabpanel", { name });
+        expect(panel.id).toBe(tab.getAttribute("aria-controls"));
+        expect(await axe(container)).toHaveNoViolations();
+      }
+      localStorage.removeItem("urbero-theme");
+    },
+  );
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
@@ -126,6 +131,129 @@ describe("App Integration & Accessibility", () => {
       ...coordinates,
       household_preset_id: "south-delhi",
     });
+  });
+
+  it("submits manual stops through the daily plan and displays the applied timing and factor", async () => {
+    const user = userEvent.setup();
+    render(<App initialView="dashboard" />);
+    await user.click(screen.getByRole("button", { name: /^Delhi$/i }));
+    await user.click(await screen.findByRole("tab", { name: /Routine/i }));
+    for (const [index, name, distance, duration] of [
+      [1, "Pharmacy", "1", "5"],
+      [2, "Groceries", "2", "10"],
+    ] as const) {
+      await user.click(
+        await screen.findByRole("button", { name: "Add errand" }),
+      );
+      fireEvent.change(screen.getByLabelText(`Stop ${index} name`), {
+        target: { value: name },
+      });
+      fireEvent.change(
+        screen.getByLabelText(`Stop ${index} distance from home (km)`),
+        { target: { value: distance } },
+      );
+      fireEvent.change(screen.getByLabelText(`Stop ${index} duration (min)`), {
+        target: { value: duration },
+      });
+    }
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ...DELHI_PLAN_FIXTURE,
+        errand_merger: {
+          ...DELHI_PLAN_FIXTURE.errand_merger,
+          baseline_separate_distance_km: 6,
+          merged_loop_distance_km: 4.4,
+          distance_saved_km: 1.6,
+          tailpipe_co2_saved_grams: 76.8,
+          recommended_start_hour: 13.25,
+          recommended_end_hour: 13.676,
+          travel_mode: "petrol_2w",
+          emissions_factor_g_per_km: 48,
+        },
+      }),
+    } as Response);
+    await user.click(screen.getByRole("button", { name: "Apply errands" }));
+    const request = vi.mocked(fetch).mock.lastCall?.[1];
+    expect(JSON.parse(String(request?.body)).errands).toEqual([
+      expect.objectContaining({
+        name: "Pharmacy",
+        distance_from_home_km: 1,
+        duration_minutes: 5,
+      }),
+      expect.objectContaining({
+        name: "Groceries",
+        distance_from_home_km: 2,
+        duration_minutes: 10,
+      }),
+    ]);
+    expect(await screen.findByText("13:15–13:41")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: /Show the Math.*errand/i }),
+    );
+    expect(screen.getByText(/1.6 km × 48 g\/km = 76.8 g/)).toBeInTheDocument();
+  });
+
+  it("retries a failed room submission and ignores an older response without reloading the schedule", async () => {
+    const user = userEvent.setup();
+    render(<App initialView="dashboard" />);
+    await user.click(screen.getByRole("button", { name: /^Delhi$/i }));
+    await user.click(await screen.findByRole("tab", { name: /Indoor/i }));
+
+    const length = await screen.findByLabelText("Length (m)");
+    const submit = screen.getByRole("button", { name: /Update CADR/i });
+    const roomResponse = (
+      lengthM: number,
+      volume: number,
+      cadr: number,
+      cfm: number,
+    ) =>
+      ({
+        ok: true,
+        json: async () => ({
+          ...DELHI_PLAN_FIXTURE.room_cadr_guidance,
+          dimensions: { length_m: lengthM, width_m: 4, height_m: 2.8 },
+          room_volume_m3: volume,
+          required_cadr_m3_per_hr: cadr,
+          required_cadr_cfm: cfm,
+        }),
+      }) as Response;
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+    } as Response);
+    fireEvent.change(length, { target: { value: "6" } });
+    await user.click(submit);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Room sizing could not be updated.",
+    );
+    expect(screen.getByText(/Sized for 56 m³/)).toBeInTheDocument();
+    vi.mocked(fetch).mockResolvedValueOnce(roomResponse(6, 67.2, 336, 197.76));
+    await user.click(
+      screen.getByRole("button", { name: "Retry room calculation" }),
+    );
+    expect(await screen.findByText(/Sized for 67.2 m³/)).toBeInTheDocument();
+    expect(screen.getByText(/197.76 CFM/)).toBeInTheDocument();
+
+    let respondOlder: (response: Response) => void = () => {};
+    vi.mocked(fetch).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          respondOlder = resolve;
+        }),
+    );
+    fireEvent.change(length, { target: { value: "7" } });
+    await user.click(submit);
+    vi.mocked(fetch).mockResolvedValueOnce(roomResponse(8, 89.6, 448, 263.68));
+    fireEvent.change(length, { target: { value: "8" } });
+    await user.click(submit);
+    expect(await screen.findByText(/Sized for 89.6 m³/)).toBeInTheDocument();
+    await act(async () => respondOlder(roomResponse(7, 78.4, 392, 230.72)));
+    expect(screen.getByText(/Sized for 89.6 m³/)).toBeInTheDocument();
+    expect(
+      vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/plan/daily"),
+    ).toHaveLength(1);
   });
 
   it("renders main landmarks: header, main content, and footer", async () => {

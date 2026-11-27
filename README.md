@@ -79,16 +79,17 @@ flowchart TD
 | Confidence and model limitations | `aqi/confidence.py`, `common/ConfidenceBadge.tsx` | `test_confidence.py`, `test_api_failures.py`, `RecommendationCards.test.tsx` |
 | History-derived diurnal slots, routine, smog/clean days | `aqi/diurnal.py`, `exposure/optimizer.py` | `test_diurnal.py`, `test_optimizer.py` |
 | Inhaled dose and activity monotonicity | `exposure/dose.py` | `test_dose.py`, `test_integrity.py`, `test_hypothesis_properties.py` |
-| CADR, source control, plants footnote | `exposure/cadr.py`, `IndoorAirGuide/` | `test_cadr.py`, `IndoorAirGuide.test.tsx` |
-| Errand permutations and actual fixed-window feasibility | `exposure/errands.py` | `test_errands.py`, `test_integrity.py` |
+| CADR applied dimensions, source adjustment, retry and plants footnote | `exposure/cadr.py`, `IndoorAirGuide/`, `App.tsx` | `test_cadr.py`, `IndoorAirGuide.test.tsx`, `App.test.tsx` |
+| Manual errand stops, fixed-window feasibility, applied emissions and dose change | `exposure/errands.py`, `LowEmissionRoutine/ErrandEditor.tsx`, `LowEmissionRoutine/ErrandLoop.tsx` | `test_errands.py`, `test_integrity.py`, `test_api_routes.py`, `App.test.tsx` |
 | Planet vs. Lungs comparisons | `exposure/commute.py`, `LowEmissionRoutine/` | `test_commute.py`, `LowEmissionRoutine.test.tsx` |
 | Structured Gemini/Grok JSON, retry, fallback briefings and travel advice | `planner/gemini.py`, `planner/grok.py`, `planner/fallback.py` | `test_gemini.py`, `test_planner.py`, `test_api_failures.py` |
-| API schema, size limits, CSP and privacy-safe throttling | `planner/schemas.py`, `api/routes.py`, `api/security.py` | `test_api_routes.py`, `test_api_failures.py` |
+| API response contracts, daily-plan assembly, size limits, CSP and privacy-safe throttling | `planner/schemas.py`, `api/routes.py`, `api/daily_plan.py`, `api/security.py` | `test_api_routes.py`, `test_api_failures.py`, `test_browser_security.py` |
 | Location gate, GPS/search/chips, unselected presets | `App.tsx`, `components/LocationPicker.tsx`, `HouseholdProfile/`, `providers/geocoding.py` | `App.test.tsx`, `LocationPicker.test.tsx`, `HouseholdProfile.test.tsx`, `test_geocoding.py` |
 | Four tabs, keyboard focus, chart/table alternatives, light and dark accessibility | `components/DashboardShell.tsx`, `LowEmissionRoutine/`, `scripts/check-ui.mjs` | `DashboardShell.test.tsx`, `LowEmissionRoutine.test.tsx`, `App.test.tsx`, Playwright and Lighthouse |
 | Card provenance and expandable actual math | `common/RecommendationCards.tsx`, `common/MathDrawer.tsx`, `ImpactJustification/` | `RecommendationCards.test.tsx`, `ImpactJustification.test.tsx` |
 | Room-photo validation / EXIF removal / unavailable analysis | `planner/vision.py` | `test_vision.py`, `test_api_routes.py` |
 | Pure engines, no external I/O imports | `aqi/`, `exposure/` | `test_pure_imports.py` |
+| Challenge source alignment (pending) | The brief requires OpenAQ v3 observations and same-station history with Grok at the narrative edge. This branch uses WAQI, labelled archived CAMS model output and Gemini-first generation. | OpenAQ replay and operator-credential failover checks belong to the provider alignment phase. See [ADR 0002](docs/adr/0002-waqi-cams-location-first.md). |
 
 Backend paths above are relative to `backend/app/`; frontend component paths are relative to `frontend/src/`.
 

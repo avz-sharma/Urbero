@@ -33,8 +33,11 @@ class RoomIndoorFactors(BaseModel):
 class RoomCADRResult(BaseModel):
     """Recommended purifier sizing and indoor air quality actions."""
 
+    dimensions: RoomDimensions
+    factors: RoomIndoorFactors
     room_volume_m3: float
     target_ach: float
+    source_multiplier: float
     required_cadr_m3_per_hr: float
     required_cadr_cfm: float
     sealing_and_source_guidance: str
@@ -94,8 +97,11 @@ def calculate_room_cadr(
     )
 
     return RoomCADRResult(
+        dimensions=dimensions.model_copy(),
+        factors=factors.model_copy(),
         room_volume_m3=volume_m3,
         target_ach=target_ach,
+        source_multiplier=adjustment_multiplier,
         required_cadr_m3_per_hr=adjusted_cadr,
         required_cadr_cfm=cadr_cfm,
         sealing_and_source_guidance=" ".join(guidance_notes),

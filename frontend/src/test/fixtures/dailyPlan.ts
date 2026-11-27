@@ -50,12 +50,14 @@ export const DELHI_PLAN_FIXTURE: DailyPlanResponse = {
       },
     ],
     is_valid: true,
-    validation_message: "Valid CPCB AQI based on 3 pollutants including particulate parameters.",
+    validation_message:
+      "Valid CPCB AQI based on 3 pollutants including particulate parameters.",
   },
   data_confidence: {
     level: "High",
     score_percent: 92,
-    reason: "Station within 3.8 km, observed 14 mins ago, reference-grade sensor reporting 3 valid parameters.",
+    reason:
+      "Station within 3.8 km, observed 14 mins ago, reference-grade sensor reporting 3 valid parameters.",
   },
   smog_episode_active: true,
   medical_disclaimer:
@@ -75,7 +77,8 @@ export const DELHI_PLAN_FIXTURE: DailyPlanResponse = {
         baseline_inhaled_pm25_ug: 42.0,
         optimized_inhaled_pm25_ug: 12.5,
         dose_reduction_ug: 29.5,
-        recommendation_note: "Shift walk indoors to HEPA-purified living room; outdoor thermal inversion peaks at 6:30 AM.",
+        recommendation_note:
+          "Shift walk indoors to HEPA-purified living room; outdoor thermal inversion peaks at 6:30 AM.",
       },
       {
         activity_id: "kid_play",
@@ -90,7 +93,8 @@ export const DELHI_PLAN_FIXTURE: DailyPlanResponse = {
         baseline_inhaled_pm25_ug: 38.5,
         optimized_inhaled_pm25_ug: 14.0,
         dose_reduction_ug: 24.5,
-        recommendation_note: "Move sports to early afternoon solar dispersion window; evening cooling traps surface particulates.",
+        recommendation_note:
+          "Move sports to early afternoon solar dispersion window; evening cooling traps surface particulates.",
       },
     ],
     total_baseline_dose_ug: 80.5,
@@ -98,9 +102,11 @@ export const DELHI_PLAN_FIXTURE: DailyPlanResponse = {
     total_dose_reduction_ug: 54.0,
     total_dose_reduction_percent: 67.1,
     smog_episode_active: true,
-    smog_episode_advisory: "Fitted N95/FFP2 respirator mandatory if outdoors. Cloth masks offer zero PM2.5 seal.",
+    smog_episode_advisory:
+      "Fitted N95/FFP2 respirator mandatory if outdoors. Cloth masks offer zero PM2.5 seal.",
     clean_air_day: false,
-    overall_advisory: "Severe winter smog episode in effect. Realign outdoor activities to the 1:00 PM – 3:30 PM solar heating window.",
+    overall_advisory:
+      "Severe winter smog episode in effect. Realign outdoor activities to the 1:00 PM – 3:30 PM solar heating window.",
   },
   commute_comparisons: [
     {
@@ -111,7 +117,8 @@ export const DELHI_PLAN_FIXTURE: DailyPlanResponse = {
       tailpipe_co2_grams: 320,
       personal_inhaled_pm25_ug: 22.4,
       exposure_multiplier: 0.25,
-      planet_vs_lungs_note: "Optimal win-win: 85% lower tailpipe CO2 vs solo car and enclosed station/train air filtration reduces PM2.5 dose by 78%.",
+      planet_vs_lungs_note:
+        "Optimal win-win: 85% lower tailpipe CO2 vs solo car and enclosed station/train air filtration reduces PM2.5 dose by 78%.",
     },
     {
       mode: "cycling",
@@ -121,7 +128,8 @@ export const DELHI_PLAN_FIXTURE: DailyPlanResponse = {
       tailpipe_co2_grams: 0,
       personal_inhaled_pm25_ug: 185.0,
       exposure_multiplier: 2.0,
-      planet_vs_lungs_note: "Planet vs Lungs Hazard: 0g tailpipe CO2, but high ventilation rate (2.8 m³/h) next to traffic yields 8x higher PM2.5 dose during smog.",
+      planet_vs_lungs_note:
+        "Planet vs Lungs Hazard: 0g tailpipe CO2, but high ventilation rate (2.8 m³/h) next to traffic yields 8x higher PM2.5 dose during smog.",
     },
     {
       mode: "petrol_car_solo",
@@ -131,7 +139,8 @@ export const DELHI_PLAN_FIXTURE: DailyPlanResponse = {
       tailpipe_co2_grams: 2880,
       personal_inhaled_pm25_ug: 19.5,
       exposure_multiplier: 0.2,
-      planet_vs_lungs_note: "Lungs protected by vehicle cabin filtration, but emits 2.88 kg tailpipe CO2.",
+      planet_vs_lungs_note:
+        "Lungs protected by vehicle cabin filtration, but emits 2.88 kg tailpipe CO2.",
     },
   ],
   errand_merger: {
@@ -170,6 +179,7 @@ export const DELHI_PLAN_FIXTURE: DailyPlanResponse = {
     merged_loop_distance_km: 8.4,
     distance_saved_km: 6.4,
     travel_mode: "auto_rickshaw",
+    emissions_factor_g_per_km: 160,
     tailpipe_co2_saved_grams: 1024,
     baseline_inhaled_pm25_ug: 48.2,
     optimized_inhaled_pm25_ug: 17.0,
@@ -177,10 +187,17 @@ export const DELHI_PLAN_FIXTURE: DailyPlanResponse = {
     rationale: "Merged 3 errands into single loop during afternoon dispersion.",
   },
   room_cadr_guidance: {
-    room_volume_m3: 64.7,
+    dimensions: { length_m: 5, width_m: 4, height_m: 2.8 },
+    factors: {
+      has_kitchen_chimney: true,
+      burns_incense_agarbatti: false,
+      has_unsealed_balcony: false,
+    },
+    source_multiplier: 1,
+    room_volume_m3: 56,
     target_ach: 5.0,
-    required_cadr_m3_per_hr: 323.5,
-    required_cadr_cfm: 190.4,
+    required_cadr_m3_per_hr: 280,
+    required_cadr_cfm: 164.8,
     sealing_and_source_guidance:
       "Door sweep and silicone foam weatherstripping required under main entrance to cut particulate infiltration by 42%.",
     ventilation_recommendation:
@@ -189,6 +206,12 @@ export const DELHI_PLAN_FIXTURE: DailyPlanResponse = {
       "The 1989 NASA Clean Air Study was conducted in sealed chambers. Potted plants (Areca Palm, Snake Plant) achieve <1% PM2.5 removal in real homes and do NOT replace HEPA purifiers.",
   },
   recommendation_cards: [],
+  exposure_reference_labels: {
+    cigarette_heuristic:
+      "The Berkeley Earth benchmark is a public communication heuristic to contextualize particulate exposure, not a clinical diagnosis or medical equivalence.",
+    reference_values:
+      "WHO 2021 (15 µg/m³) and India NAAQS (60 µg/m³) 24-hour PM2.5 levels are regulatory and scientific reference values, not a personal 'safe pollution budget'.",
+  },
   whatsapp_card: {
     headline: "🌅 Urbero Family Air Advisory — South Delhi (Anand Vihar)",
     language: "english",
@@ -198,7 +221,8 @@ export const DELHI_PLAN_FIXTURE: DailyPlanResponse = {
       "Keep living room air purifier on High (CADR 320 m³/h).",
       "Rahul should commute via Blue Line Metro instead of driving solo.",
     ],
-    commute_tip: "Take Blue Line Metro; avoid cycling during morning inversion.",
+    commute_tip:
+      "Take Blue Line Metro; avoid cycling during morning inversion.",
     indoor_tip: "Run purifier at 324 m³/h; seal main balcony door gaps.",
     sensitive_member_alert:
       "Asthmatics and 8yo child must wear fitted N95/FFP2 masks outdoors.",
@@ -215,9 +239,12 @@ export const DELHI_PLAN_FIXTURE: DailyPlanResponse = {
 ⚠️ Note: The Berkeley Earth cigarette equivalence (~22 µg/m³ for 24h = 1 cigarette) is a communication heuristic, not a medical diagnosis.`,
   },
   community_brief: {
-    rwa_society_advisory: "Run clubhouse purifiers on high; seal common area entry doors.",
-    school_outdoor_activity_recommendation: "Cancel morning outdoor physical exercise and school assemblies before 11:00 AM.",
-    mask_and_health_guidance: "Fitted N95/FFP2 masks recommended for outdoor transit.",
+    rwa_society_advisory:
+      "Run clubhouse purifiers on high; seal common area entry doors.",
+    school_outdoor_activity_recommendation:
+      "Cancel morning outdoor physical exercise and school assemblies before 11:00 AM.",
+    mask_and_health_guidance:
+      "Fitted N95/FFP2 masks recommended for outdoor transit.",
     formatted_brief: `🏛️ *RWA & School Smog Advisory — South Delhi*
 • Current AQI: 345 (Very Poor, Anand Vihar CPCB station).
 • Action for Schools: Suspend morning outdoor assemblies and sports before 11:00 AM.

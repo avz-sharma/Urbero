@@ -15,7 +15,7 @@ Exit code: 0
 ## Backend: mypy --strict app
 
 ```text
-Success: no issues found in 32 source files
+Success: no issues found in 33 source files
 
 Exit code: 0
 ```
@@ -24,8 +24,8 @@ Exit code: 0
 ## Backend: pytest --cov=app --cov-report=term-missing
 
 ```text
-........................................................................ [ 62%]
-...........................................                              [100%]
+........................................................................ [ 51%]
+....................................................................     [100%]
 ============================== warnings summary ===============================
 tests\test_api_failures.py:7
   C:\PROMPTWARS\Urbero\backend\tests\test_api_failures.py:7: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
@@ -39,39 +39,40 @@ Name                          Stmts   Miss  Cover   Missing
 -----------------------------------------------------------
 app\__init__.py                   0      0   100%
 app\api\__init__.py               0      0   100%
+app\api\daily_plan.py            61      5    92%   41-43, 66-67
 app\api\locations.py             19      1    95%   31
-app\api\routes.py               154      6    96%   162, 283-284, 361-363
-app\api\security.py              69      2    97%   61, 79
+app\api\routes.py               121      7    94%   67, 145, 199-200, 222-224
+app\api\security.py              78      2    97%   69, 87
 app\aqi\__init__.py               0      0   100%
-app\aqi\confidence.py            57      0   100%
+app\aqi\confidence.py            54      0   100%
 app\aqi\cpcb.py                  76      3    96%   49, 77, 94
 app\aqi\diurnal.py               58      1    98%   97
 app\config\__init__.py            0      0   100%
 app\config\constants.py          29      0   100%
 app\exposure\__init__.py          0      0   100%
-app\exposure\cadr.py             44      2    95%   52, 54
+app\exposure\cadr.py             47      2    96%   55, 57
 app\exposure\commute.py          46      1    98%   98
 app\exposure\dose.py             32      1    97%   53
-app\exposure\errands.py          85      5    94%   70, 72, 74, 76, 107
-app\exposure\optimizer.py       118      8    93%   38, 93, 95, 114-116, 120, 171
+app\exposure\errands.py          93      6    94%   78, 92, 112, 114, 116, 118
+app\exposure\optimizer.py       121      7    94%   38, 100-102, 106, 176, 178
 app\exposure\transit.py           4      0   100%
 app\planner\__init__.py           0      0   100%
-app\planner\fallback.py          52      9    83%   51-64, 135-140
-app\planner\gemini.py            34      3    91%   22, 28, 47
-app\planner\grok.py             101     20    80%   144, 160, 195-220, 245, 284
-app\planner\schemas.py          132      0   100%
+app\planner\fallback.py          54      9    83%   51-64, 135-140
+app\planner\gemini.py            36      2    94%   31, 37
+app\planner\grok.py             130     22    83%   131, 170, 186, 221-246, 271, 352, 372
+app\planner\schemas.py          153      0   100%
 app\planner\vision.py            45      4    91%   51, 108-110
 app\providers\__init__.py         0      0   100%
 app\providers\base.py            49      3    94%   35, 38, 40
-app\providers\cache.py          151     17    89%   57-58, 72-73, 151, 165-167, 193, 213, 230-233, 239-241
-app\providers\geocoding.py      172     14    92%   161-162, 178, 220, 263, 285, 290, 321-328
+app\providers\cache.py          148     11    93%   58, 72-73, 151, 165-167, 184, 196-197, 217
+app\providers\geocoding.py      184     16    91%   137, 161, 177, 250-252, 282, 287, 318-325, 388
 app\providers\openmeteo.py      102      8    92%   46-47, 66-67, 86, 107, 114, 173
 app\providers\pipeline.py        24      1    96%   45
 app\providers\resilience.py      27      2    93%   26, 36
 app\providers\waqi.py            61      7    89%   42, 63-64, 74, 82, 95, 116
 -----------------------------------------------------------
-TOTAL                          1741    118    93%
-115 passed, 1 warning in 11.15s
+TOTAL                          1852    121    93%
+140 passed, 1 warning in 13.01s
 
 Exit code: 0
 ```
@@ -113,10 +114,21 @@ Exit code: 0
 
 
  Test Files  9 passed (9)
-      Tests  49 passed (49)
-   Start at  22:25:36
-   Duration  15.40s (import 34%, environment 27%, tests 23%, setup 15%, transform 1%)
+      Tests  51 passed (51)
+   Start at  23:52:36
+   Duration  21.27s (environment 32%, import 29%, tests 20%, setup 16%, transform 2%, worker 1%)
 
+Error: Not implemented: window.scrollTo
+    at module.exports (C:\PROMPTWARS\Urbero\frontend\node_modules\jsdom\lib\jsdom\browser\not-implemented.js:9:17)
+    at C:\PROMPTWARS\Urbero\frontend\node_modules\jsdom\lib\jsdom\browser\Window.js:960:7
+    at file:///C:/PROMPTWARS/Urbero/frontend/node_modules/motion-dom/dist/es/animation/keyframes/KeyframesResolver.mjs:56:24
+    at Array.forEach (<anonymous>)
+    at measureAllKeyframes (file:///C:/PROMPTWARS/Urbero/frontend/node_modules/motion-dom/dist/es/animation/keyframes/KeyframesResolver.mjs:54:28)
+    at triggerCallback (file:///C:/PROMPTWARS/Urbero/frontend/node_modules/motion-dom/dist/es/frameloop/render-step.mjs:36:29)
+    at Set.forEach (<anonymous>)
+    at Object.process (file:///C:/PROMPTWARS/Urbero/frontend/node_modules/motion-dom/dist/es/frameloop/render-step.mjs:85:23)
+    at processBatch (file:///C:/PROMPTWARS/Urbero/frontend/node_modules/motion-dom/dist/es/frameloop/batcher.mjs:35:26)
+    at invokeTheCallbackFunction (C:\PROMPTWARS\Urbero\frontend\node_modules\jsdom\lib\jsdom\living\generated\Function.js:19:26) undefined
 
 Exit code: 0
 ```
@@ -131,14 +143,14 @@ Exit code: 0
 
 vite v6.4.6 building for production...
 transforming...
-✓ 2591 modules transformed.
+✓ 2593 modules transformed.
 rendering chunks...
 computing gzip size...
-dist/index.html                        0.94 kB │ gzip:   0.51 kB
-dist/assets/index-DZDUG0RS.css        48.70 kB │ gzip:   9.40 kB
-dist/assets/CommuteBars-D4UfjfNc.js    3.07 kB │ gzip:   1.04 kB
-dist/assets/index-CAjl9X8B.js        355.33 kB │ gzip: 109.59 kB
-✓ built in 7.69s
+dist/index.html                        0.65 kB │ gzip:   0.38 kB
+dist/assets/index-R0fhdGn4.css        47.98 kB │ gzip:   9.27 kB
+dist/assets/CommuteBars-BEbGX2Vw.js    3.07 kB │ gzip:   1.04 kB
+dist/assets/index-BWgzaHbL.js        352.36 kB │ gzip: 110.06 kB
+✓ built in 7.03s
 
 Exit code: 0
 ```

@@ -15,11 +15,13 @@ from pydantic import TypeAdapter, ValidationError
 
 from backend.app.planner.schemas import LocationSearchResult, ReverseGeocodeResult
 from backend.app.providers.cache import SupabaseCache
-from backend.app.providers.resilience import ResilientGet
+from backend.app.providers.resilience import ResilientGet, UpstreamUnavailable
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
 SEARCH_RESULTS = TypeAdapter(list[LocationSearchResult])
+SEARCH_LIMIT = 5
+NOMINATIM_HEADERS = {"User-Agent": "Urbero-Urban-Air-Assistant/1.0 (contact@urbero.internal)"}
 
 
 async def coalesce(
@@ -115,6 +117,66 @@ CURATED_INDIAN_LOCATIONS: list[LocationSearchResult] = [
 ]
 
 
+def _parse_open_meteo_row(item: dict[str, Any]) -> LocationSearchResult | None:
+    if str(item.get("country_code", "")).upper() != "IN":
+        return None
+    city = item["name"]
+    state = item.get("admin1", city)
+    return LocationSearchResult(
+        label=f"{city}, {state}, India",
+        city=city,
+        state=state,
+        lat=item["latitude"],
+        lon=item["longitude"],
+    )
+
+
+def _parse_nominatim_row(item: dict[str, Any], query: str) -> LocationSearchResult | None:
+    address = item.get("address", {})
+    if str(address.get("country_code", "in")).lower() != "in":
+        return None
+    city = address.get("city", address.get("town", address.get("suburb", query)))
+    state = address.get("state", "India")
+    locality = item["display_name"].split(",", maxsplit=1)[0]
+    return LocationSearchResult(
+        label=f"{locality}, {city}, {state}",
+        city=city,
+        state=state,
+        lat=item["lat"],
+        lon=item["lon"],
+    )
+
+
+def _add_provider_results(
+    results: list[LocationSearchResult],
+    rows: object,
+    parse: Callable[[dict[str, Any]], LocationSearchResult | None],
+    provider: str,
+) -> None:
+    if not isinstance(rows, list):
+        return
+    for row in rows:
+        try:
+            if not isinstance(row, dict):
+                raise TypeError("Expected an object")
+            candidate = parse(row)
+        except (AttributeError, KeyError, TypeError, ValidationError):
+            logger.warning("geocoding_row_invalid provider=%s", provider)
+            continue
+        if candidate is None or any(
+            abs(known.lat - candidate.lat) < 0.01 and abs(known.lon - candidate.lon) < 0.01
+            for known in results
+        ):
+            continue
+        results.append(
+            candidate.model_copy(
+                update={"lat": round(candidate.lat, 4), "lon": round(candidate.lon, 4)}
+            )
+        )
+        if len(results) == SEARCH_LIMIT:
+            break
+
+
 class GeocodingProvider:
     """Indian geocoding with 24-hour caching and privacy grid snapping."""
 
@@ -146,136 +208,71 @@ class GeocodingProvider:
 
         norm_key = self._normalize_query_key(clean_query)
         now = time.time()
-
-        # Check L1 cache
-        if norm_key in self._search_cache:
-            exp, cached_res = self._search_cache[norm_key]
-            if now < exp:
-                return cached_res
-
         shared_key = self._shared.search_key(norm_key)
-        if shared_key is not None and (shared := await self._shared.get_fresh(shared_key)):
-            expires_at, cached_data = shared
-            try:
-                cached_results = SEARCH_RESULTS.validate_python(cached_data.get("results"))
-            except ValidationError:
-                logger.warning("cache_payload_invalid tier=l2 provider=location_search")
-            else:
-                self._store_search(norm_key, expires_at, cached_results)
-                return cached_results
+        cached = await self._cached_search(norm_key, shared_key, now)
+        if cached is not None:
+            return cached
 
-        results: list[LocationSearchResult] = []
+        results = [
+            loc
+            for loc in CURATED_INDIAN_LOCATIONS
+            if any(norm_key in field.lower() for field in (loc.label, loc.city, loc.state))
+        ][:SEARCH_LIMIT]
+        if len(results) < SEARCH_LIMIT:
+            await self._search_open_meteo(clean_query, results)
 
-        # 1. Check curated locations for immediate exact/substring matches
-        for loc in CURATED_INDIAN_LOCATIONS:
-            if (
-                clean_query.lower() in loc.label.lower()
-                or clean_query.lower() in loc.city.lower()
-                or clean_query.lower() in loc.state.lower()
-            ):
-                results.append(loc)
-                if len(results) >= 5:
-                    break
-
-        # 2. If curated matches are fewer than 5, query Open-Meteo Geocoding API
-        if len(results) < 5:
-            try:
-                url = "https://geocoding-api.open-meteo.com/v1/search"
-                params: dict[str, str | int] = {
-                    "name": clean_query,
-                    "count": 10,
-                    "language": "en",
-                    "format": "json",
-                }
-                async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=3.0)) as client:
-                    resp = await self._openmeteo.request(lambda: client.get(url, params=params))
-                    if resp.status_code == 200:
-                        data: dict[str, Any] = resp.json()
-                        raw_items = data.get("results", [])
-                        for item in raw_items:
-                            # Prioritize or filter for India (country_code == 'IN')
-                            country_code = str(item.get("country_code", "")).upper()
-                            if country_code == "IN":
-                                name = str(item.get("name", ""))
-                                admin1 = str(item.get("admin1", name))
-                                lat = float(item["latitude"])
-                                lon = float(item["longitude"])
-                                label = f"{name}, {admin1}, India"
-
-                                # Avoid duplicate lat/lon
-                                if not any(
-                                    abs(r.lat - lat) < 0.01 and abs(r.lon - lon) < 0.01
-                                    for r in results
-                                ):
-                                    results.append(
-                                        LocationSearchResult(
-                                            label=label,
-                                            city=name,
-                                            state=admin1,
-                                            lat=round(lat, 4),
-                                            lon=round(lon, 4),
-                                        )
-                                    )
-                                    if len(results) >= 5:
-                                        break
-            except Exception as err:
-                logger.warning(f"Open-Meteo geocoding search failed: {type(err).__name__}")
-
-        # Only curated and city/locality results can enter the shared search cache.
+        # Keep Nominatim results, which can include more precise addresses, in L1 only.
         can_share = bool(results)
-        # 3. Fallback to Nominatim if still empty
         if not results:
-            try:
-                nom_url = "https://nominatim.openstreetmap.org/search"
-                nom_params: dict[str, str | int] = {
-                    "q": clean_query,
-                    "countrycodes": "in",
-                    "format": "json",
-                    "limit": 5,
-                    "addressdetails": 1,
-                }
-                headers = {"User-Agent": "Urbero-Urban-Air-Assistant/1.0 (contact@urbero.internal)"}
-                async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=3.0)) as client:
-                    resp = await self._nominatim.request(
-                        lambda: client.get(nom_url, params=nom_params, headers=headers)
-                    )
-                    if resp.status_code == 200:
-                        nom_items = resp.json()
-                        for item in nom_items:
-                            display_name = str(item.get("display_name", ""))
-                            address = item.get("address", {})
-                            city = address.get(
-                                "city", address.get("town", address.get("suburb", clean_query))
-                            )
-                            state = address.get("state", "India")
-                            lat = float(item["lat"])
-                            lon = float(item["lon"])
-                            results.append(
-                                LocationSearchResult(
-                                    label=display_name.split(",")[0] + f", {city}, {state}",
-                                    city=city,
-                                    state=state,
-                                    lat=round(lat, 4),
-                                    lon=round(lon, 4),
-                                )
-                            )
-                            if len(results) >= 5:
-                                break
-            except Exception as err:
-                logger.warning(f"Nominatim geocoding search failed: {type(err).__name__}")
-
-        # Final trimming to at most 5 items and store in cache
-        final_results = results[:5]
-        if final_results:
+            await self._search_nominatim(clean_query, results)
+        if results:
             expires_at = now + self.cache_ttl
-            self._store_search(norm_key, expires_at, final_results)
+            self._store_search(norm_key, expires_at, results)
             if shared_key is not None and can_share:
                 await self._shared.set_fresh(
                     shared_key,
                     expires_at,
-                    {"results": SEARCH_RESULTS.dump_python(final_results, mode="json")},
+                    {"results": SEARCH_RESULTS.dump_python(results, mode="json")},
                 )
-        return final_results
+        return results
+
+    async def _cached_search(
+        self, key: str, shared_key: str | None, now: float
+    ) -> list[LocationSearchResult] | None:
+        cached = self._search_cache.get(key)
+        if cached is not None and now < cached[0]:
+            return cached[1]
+        if shared_key is None or not (shared := await self._shared.get_fresh(shared_key)):
+            return None
+        expires_at, data = shared
+        try:
+            results = SEARCH_RESULTS.validate_python(data.get("results"))[:SEARCH_LIMIT]
+        except ValidationError:
+            logger.warning("cache_payload_invalid tier=l2 provider=location_search")
+            return None
+        self._store_search(key, expires_at, results)
+        return results
+
+    async def _search_open_meteo(self, query: str, results: list[LocationSearchResult]) -> None:
+        url = "https://geocoding-api.open-meteo.com/v1/search"
+        params = {"name": query, "count": "10", "language": "en", "format": "json"}
+        data = await _fetch_search(self._openmeteo, url, params)
+        if isinstance(data, dict):
+            _add_provider_results(results, data.get("results"), _parse_open_meteo_row, "open_meteo")
+
+    async def _search_nominatim(self, query: str, results: list[LocationSearchResult]) -> None:
+        url = "https://nominatim.openstreetmap.org/search"
+        params = {
+            "q": query,
+            "countrycodes": "in",
+            "format": "json",
+            "limit": str(SEARCH_LIMIT),
+            "addressdetails": "1",
+        }
+        data = await _fetch_search(self._nominatim, url, params, headers=NOMINATIM_HEADERS)
+        _add_provider_results(
+            results, data, lambda row: _parse_nominatim_row(row, query), "nominatim"
+        )
 
     def _store_search(
         self, key: str, expires_at: float, results: list[LocationSearchResult]
@@ -336,10 +333,9 @@ class GeocodingProvider:
                 "format": "json",
                 "addressdetails": 1,
             }
-            headers = {"User-Agent": "Urbero-Urban-Air-Assistant/1.0 (contact@urbero.internal)"}
             async with httpx.AsyncClient(timeout=httpx.Timeout(4.0, connect=2.0)) as client:
                 resp = await self._nominatim.request(
-                    lambda: client.get(nom_url, params=nom_params, headers=headers)
+                    lambda: client.get(nom_url, params=nom_params, headers=NOMINATIM_HEADERS)
                 )
                 if resp.status_code == 200:
                     data = resp.json()
@@ -373,3 +369,28 @@ class GeocodingProvider:
         )
 
         return fallback_res
+
+
+async def _fetch_search(
+    resilient: ResilientGet,
+    url: str,
+    params: dict[str, str],
+    *,
+    headers: dict[str, str] | None = None,
+) -> object:
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=3.0)) as client:
+            response = await resilient.request(
+                lambda: client.get(url, params=params, headers=headers)
+            )
+            response.raise_for_status()
+            if response.status_code != 200:
+                return None
+            return response.json()
+    except (httpx.HTTPError, UpstreamUnavailable, ValueError) as error:
+        logger.warning(
+            "geocoding_search_failed host=%s error_type=%s",
+            httpx.URL(url).host,
+            type(error).__name__,
+        )
+        return None

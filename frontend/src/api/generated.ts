@@ -210,10 +210,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Generate Daily Plan
-         * @description End-to-end personalized daily plan: deterministic calculations with GenAI edge narrative.
-         */
+        /** Generate Daily Plan */
         post: operations["generate_daily_plan_api_plan_post"];
         delete?: never;
         options?: never;
@@ -230,10 +227,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Generate Daily Plan
-         * @description End-to-end personalized daily plan: deterministic calculations with GenAI edge narrative.
-         */
+        /** Generate Daily Plan */
         post: operations["generate_daily_plan_api_plan_daily_post"];
         delete?: never;
         options?: never;
@@ -462,6 +456,7 @@ export interface components {
              * @default Unavailable; schedule timing optimization disabled.
              */
             history_source: string;
+            exposure_reference_labels?: components["schemas"]["ExposureReferenceLabels"];
         };
         /**
          * DiurnalHourProfile
@@ -569,10 +564,42 @@ export interface components {
             /** Window Close Hour */
             window_close_hour?: number | null;
         };
+        /** ExposureReferenceLabels */
+        ExposureReferenceLabels: {
+            /**
+             * Cigarette Heuristic
+             * @default The cigarette equivalent metric is based on the Berkeley Earth benchmark (~22 µg/m³ over 24 hours ≈ 1 cigarette). This is a public communication heuristic to contextualize particulate exposure, NOT a clinical diagnosis or medical equivalence.
+             */
+            cigarette_heuristic: string;
+            /**
+             * Reference Values
+             * @default WHO 2021 (15 µg/m³) and India NAAQS (60 µg/m³) 24-hour PM2.5 levels are regulatory and scientific reference values, not a personal 'safe pollution budget'.
+             */
+            reference_values: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HealthResponse */
+        HealthResponse: {
+            /**
+             * Status
+             * @default healthy
+             * @constant
+             */
+            status: "healthy";
+            /**
+             * Service
+             * @default urbero-backend
+             * @constant
+             */
+            service: "urbero-backend";
+            /** Timestamp */
+            timestamp: string;
+            /** Environment */
+            environment: string;
         };
         /**
          * LocationSearchResult
@@ -601,7 +628,7 @@ export interface components {
             formula_expression: string;
             /** Inputs */
             inputs: {
-                [key: string]: unknown;
+                [key: string]: string | boolean | number | null;
             };
             /** Output Value */
             output_value: number | string;
@@ -629,6 +656,8 @@ export interface components {
             distance_saved_km: number;
             /** Travel Mode */
             travel_mode: string;
+            /** Emissions Factor G Per Km */
+            emissions_factor_g_per_km: number;
             /** Tailpipe Co2 Saved Grams */
             tailpipe_co2_saved_grams: number;
             /** Baseline Inhaled Pm25 Ug */
@@ -684,6 +713,28 @@ export interface components {
             no2_ug_m3?: number | null;
             /** Co Ug M3 */
             co_ug_m3?: number | null;
+        };
+        /** NearestStationResponse */
+        NearestStationResponse: {
+            /** Station Name */
+            station_name: string;
+            /** Distance Km */
+            distance_km: number;
+            /** Source */
+            source: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "live" | "modelled_live" | "stale";
+            /** Is Reference Grade */
+            is_reference_grade: boolean | null;
+            /** Observed At */
+            observed_at: string;
+            /** Readings */
+            readings: components["schemas"]["SensorReading"][];
+            cpcb_aqi: components["schemas"]["CPCBAQIResult"];
+            data_confidence: components["schemas"]["ConfidenceResult"];
         };
         /**
          * OptimizedActivity
@@ -762,10 +813,14 @@ export interface components {
          * @description Recommended purifier sizing and indoor air quality actions.
          */
         RoomCADRResult: {
+            dimensions: components["schemas"]["RoomDimensions"];
+            factors: components["schemas"]["RoomIndoorFactors"];
             /** Room Volume M3 */
             room_volume_m3: number;
             /** Target Ach */
             target_ach: number;
+            /** Source Multiplier */
+            source_multiplier: number;
             /** Required Cadr M3 Per Hr */
             required_cadr_m3_per_hr: number;
             /** Required Cadr Cfm */
@@ -929,6 +984,50 @@ export interface components {
              * @default false
              */
             indoor_purifier_active: boolean;
+        };
+        /**
+         * SensorReading
+         * @description Normalized real-world sensor reading with mandatory honesty metadata.
+         */
+        SensorReading: {
+            /** Parameter */
+            parameter: string;
+            /** Value */
+            value: number;
+            /** Unit */
+            unit: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Fetched At
+             * Format: date-time
+             */
+            fetched_at: string;
+            /** Source */
+            source: string;
+            /** Station */
+            station: string;
+            /** Distance Km */
+            distance_km: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "live" | "modelled_live" | "stale";
+            /** Is Reference Grade */
+            is_reference_grade?: boolean | null;
+            /** Station Latitude */
+            station_latitude?: number | null;
+            /** Station Longitude */
+            station_longitude?: number | null;
+            /**
+             * Conversion Note
+             * @default Concentration supplied by provider; hourly/spot estimate, not a certified CPCB average.
+             */
+            conversion_note: string;
         };
         /**
          * StationMetadataSchema
@@ -1137,9 +1236,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["HealthResponse"];
                 };
             };
         };
@@ -1164,9 +1261,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["NearestStationResponse"];
                 };
             };
             /** @description Validation Error */

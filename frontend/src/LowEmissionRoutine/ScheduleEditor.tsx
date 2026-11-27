@@ -6,7 +6,7 @@ export function formatHour(hour: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
-function readHour(value: string): number {
+export function readHour(value: string): number {
   const [hours, minutes] = value.split(":").map(Number);
   return hours + minutes / 60;
 }

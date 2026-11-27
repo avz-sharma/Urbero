@@ -8,6 +8,78 @@ from backend.app.exposure.errands import (
 )
 
 
+def test_two_stop_loop_returns_applied_emissions_factor_and_fractional_times() -> None:
+    stops = [
+        ErrandStop(
+            id="pharmacy",
+            name="Pharmacy",
+            category="pharmacy",
+            duration_minutes=5,
+            distance_from_home_km=1,
+        ),
+        ErrandStop(
+            id="groceries",
+            name="Groceries",
+            category="groceries",
+            duration_minutes=10,
+            distance_from_home_km=2,
+        ),
+    ]
+
+    result = optimize_errands(stops, 13.25, 16, 80, 40)
+
+    assert [stop.id for stop in result.ordered_stops] == ["pharmacy", "groceries"]
+    assert result.travel_mode == "petrol_2w"
+    assert result.model_dump()["emissions_factor_g_per_km"] == 48
+    assert result.baseline_separate_distance_km == 6
+    assert result.merged_loop_distance_km == 4.4
+    assert result.distance_saved_km == 1.6
+    assert result.tailpipe_co2_saved_grams == 76.8
+    assert result.recommended_start_hour == 13.25
+    assert result.recommended_end_hour == 13.676
+    assert "13:15" in result.rationale
+    assert "13:41" in result.rationale
+
+
+def test_waiting_can_increase_dose_in_the_cleaner_window() -> None:
+    pickup = ErrandStop(
+        id="pickup",
+        name="School pickup",
+        category="school_pickup",
+        duration_minutes=10,
+        distance_from_home_km=1,
+        window_open_hour=15,
+        window_close_hour=15.5,
+    )
+
+    result = optimize_errands([pickup], 13, 16, 80, 40)
+
+    assert result.baseline_inhaled_pm25_ug == 13.8
+    assert result.optimized_inhaled_pm25_ug == 61.8
+    assert result.pm25_dose_reduction_percent == -347.8
+    assert "increases" in result.rationale
+    assert "347.8%" in result.rationale
+
+
+def test_four_stop_loop_keeps_the_first_equally_ranked_ordering() -> None:
+    stops = [
+        ErrandStop(
+            id=str(distance),
+            name=f"Stop {distance}",
+            category="groceries",
+            duration_minutes=5,
+            distance_from_home_km=distance,
+        )
+        for distance in range(1, 5)
+    ]
+
+    result = optimize_errands(stops, 13, 16, 80, 40)
+
+    assert [stop.id for stop in result.ordered_stops] == ["1", "2", "3", "4"]
+    assert result.merged_loop_distance_km == 10.4
+    assert result.recommended_end_hour == 13.7493
+
+
 def test_errand_merger_savings() -> None:
     """Test 3-stop errand consolidation yields distance, CO2, and dose reductions."""
     stops = [

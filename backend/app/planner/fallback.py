@@ -202,7 +202,7 @@ def generate_deterministic_fallback(
             title="Room CADR & Envelope Sealing Engine",
             why=(
                 "Sealing gaps, controlling indoor sources and purifier sizing can reduce particulate exposure. "
-                f"A properly sized {cadr.required_cadr_m3_per_hr} m³/h purifier achieves {cadr.target_ach} air changes/hr."
+                f"The {cadr.required_cadr_m3_per_hr} m³/h sizing estimate uses a target of {cadr.target_ach} air changes/hr."
             ),
             quantified_impact=(
                 f"Sizing estimate: {cadr.required_cadr_m3_per_hr} m³/h CADR for a {cadr.room_volume_m3} m³ room; "
@@ -214,9 +214,13 @@ def generate_deterministic_fallback(
                 inputs={
                     "room_volume_m3": cadr.room_volume_m3,
                     "target_ach": cadr.target_ach,
+                    "length_m": cadr.dimensions.length_m,
+                    "width_m": cadr.dimensions.width_m,
+                    "height_m": cadr.dimensions.height_m,
+                    "source_multiplier": cadr.source_multiplier,
                 },
                 output_value=f"{cadr.required_cadr_m3_per_hr} m³/h ({cadr.required_cadr_cfm} CFM)",
-                reference_benchmark="AHAM AC-1 standard (5 ACH recommended for high pollution)",
+                reference_benchmark="ACH is a configurable filtration sizing assumption.",
                 scientific_citation="Chen & Zhao (2011), Indoor Air; ANSI/AHAM AC-1-2020",
             ),
             station_metadata=station,
@@ -227,6 +231,12 @@ def generate_deterministic_fallback(
 
     # Card 3: Impact Justification & Errand Loop
     if errands:
+        dose_change = errands.pm25_dose_reduction_percent
+        dose_impact = (
+            f"estimated PM2.5 dose is {abs(dose_change)}% {'lower' if dose_change > 0 else 'higher'}"
+            if dose_change
+            else "estimated PM2.5 dose is unchanged"
+        )
         cards.append(
             RecommendationCard(
                 id="rec-errands",
@@ -238,7 +248,7 @@ def generate_deterministic_fallback(
                 ),
                 quantified_impact=(
                     f"Saves {errands.distance_saved_km} km of travel, avoids {errands.tailpipe_co2_saved_grams}g CO2, "
-                    f"and cuts personal PM2.5 dose by {errands.pm25_dose_reduction_percent}%."
+                    f"and {dose_impact}."
                 ),
                 math_breakdown=MathBreakdownSchema(
                     formula_name="Brute-Force Permutation Errand Merger",
@@ -247,9 +257,12 @@ def generate_deterministic_fallback(
                         "stops_count": len(errands.ordered_stops),
                         "baseline_distance_km": errands.baseline_separate_distance_km,
                         "merged_distance_km": errands.merged_loop_distance_km,
+                        "distance_saved_km": errands.distance_saved_km,
+                        "mode": errands.travel_mode,
+                        "emissions_factor_g_per_km": errands.emissions_factor_g_per_km,
                     },
                     output_value=f"{errands.distance_saved_km} km saved ({errands.tailpipe_co2_saved_grams}g CO2 avoided)",
-                    reference_benchmark="CPCB India tailpipe factors for urban two-wheelers (48 g CO2/km)",
+                    reference_benchmark="Scenario estimate based on the configured travel-mode factor.",
                     scientific_citation="CPCB / ARAI vehicular emission inventories (2018)",
                 ),
                 station_metadata=station,

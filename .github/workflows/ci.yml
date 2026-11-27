@@ -35,7 +35,22 @@ jobs:
 
       - name: Pytest Suite with Coverage
         run: |
-          pytest --cov=backend/app --cov-report=term-missing --cov-fail-under=90 backend/tests/
+          pytest --cov=backend/app --cov-report=term-missing --cov-report=json:"$RUNNER_TEMP/coverage.json" --cov-fail-under=90 backend/tests/
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads((Path(os.environ['RUNNER_TEMP']) / 'coverage.json').read_text())
+          engines = {name: result['summary']['percent_covered'] for name, result in report['files'].items()
+                     if name.startswith(('backend/app/aqi/', 'backend/app/exposure/'))}
+          if not engines:
+              raise SystemExit('Coverage report contains no deterministic engines')
+          for name, percent in engines.items():
+              print(f'{name}: {percent:.2f}%')
+          if any(percent < 90 for percent in engines.values()):
+              raise SystemExit('A deterministic engine is below 90% coverage')
+          PY
 
       - name: Export schema and audit dependencies
         run: |
@@ -78,18 +93,35 @@ jobs:
           npm run build
           npm audit --audit-level=high
 
-      - name: Chromium interaction and Lighthouse accessibility
+      - name: Set up Python for the browser gate
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install FastAPI server dependencies
+        working-directory: .
+        run: python -m pip install -e .
+
+      - name: FastAPI Chromium interaction, CSP and Lighthouse accessibility
         working-directory: .
         env:
           URBERO_AUDIT_TOOLS: ${{ runner.temp }}/urbero-ui
           URBERO_AUDIT_URL: http://127.0.0.1:4173
+          URBERO_AUDIT_REPLAY_URL: http://127.0.0.1:4174
+          URBERO_AUDIT_OUTAGE_URL: http://127.0.0.1:4175
         run: |
           npm install --prefix "$URBERO_AUDIT_TOOLS" --no-save playwright@1.65.1 lighthouse@13.6.0 chrome-launcher@1.2.3
           "$URBERO_AUDIT_TOOLS/node_modules/.bin/playwright" install --with-deps chromium
-          npm --prefix frontend run preview -- --host 127.0.0.1 --port 4173 &
-          for attempt in {1..30}; do
-            if curl --fail --silent --output /dev/null "$URBERO_AUDIT_URL"; then break; fi
-            sleep 1
+          python -m uvicorn backend.app.api.routes:app --host 127.0.0.1 --port 4173 --no-access-log &
+          server_pid=$!
+          python -m uvicorn backend.tests.fixtures.browser_app:create_replay_app --factory --host 127.0.0.1 --port 4174 --no-access-log &
+          replay_pid=$!
+          python -m uvicorn backend.tests.fixtures.browser_app:create_outage_app --factory --host 127.0.0.1 --port 4175 --no-access-log &
+          outage_pid=$!
+          trap 'kill "$server_pid" "$replay_pid" "$outage_pid" 2>/dev/null || true' EXIT
+          for url in "$URBERO_AUDIT_URL" "$URBERO_AUDIT_REPLAY_URL" "$URBERO_AUDIT_OUTAGE_URL"; do
+            curl --retry 20 --retry-connrefused --retry-delay 1 --max-time 3 --fail --silent --show-error --output /dev/null "$url"
           done
           node --experimental-strip-types scripts/check-ui.mjs
 

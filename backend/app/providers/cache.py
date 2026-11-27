@@ -172,6 +172,31 @@ class MultiTierCache:
             self._normalize_key(lat, lon), [r.model_dump(mode="json") for r in readings]
         )
 
+    async def _fetch_or_fallback(
+        self,
+        lat: float,
+        lon: float,
+        fetcher: Callable[[], Awaitable[list[SensorReading]]],
+    ) -> list[SensorReading]:
+        try:
+            readings = await fetcher()
+            if not readings:
+                raise ValueError("Provider returned no readings")
+            self.set_l1(lat, lon, readings)
+            await self.set_l2_supabase(lat, lon, readings)
+            return readings
+        except Exception as err:
+            logger.warning("cache_fallback error_type=%s", type(err).__name__)
+            stale_l1 = self.get_l1(lat, lon, allow_stale=True)
+            if stale_l1:
+                return stale_l1
+
+            stale_l2 = await self.get_l2_supabase(lat, lon)
+            if stale_l2:
+                self.set_l1(lat, lon, stale_l2, ttl_seconds=-1)
+                return stale_l2
+            raise
+
     async def get_coalesced(
         self,
         lat: float,
@@ -181,12 +206,11 @@ class MultiTierCache:
         """Single-flight request coalescing: prevent thundering herd on live provider."""
         key = self._normalize_key(lat, lon)
 
-        # 1. Check valid L1 cache
         cached = self.get_l1(lat, lon, allow_stale=False)
         if cached:
             return cached
 
-        # 2. Coordinate concurrent in-flight fetches for the same key
+        # Another request may have populated L1 while this request was queued.
         async with self._lock:
             cached = self.get_l1(lat, lon, allow_stale=False)
             if cached:
@@ -194,50 +218,23 @@ class MultiTierCache:
 
             future = self._in_flight.get(key)
             is_leader = future is None
-
-            if is_leader:
-                loop = asyncio.get_running_loop()
-                future = loop.create_future()
+            if future is None:
+                future = asyncio.get_running_loop().create_future()
                 self._in_flight[key] = future
 
         if not is_leader:
-            # Another request is already fetching this station; await its result
-            assert future is not None
             return await asyncio.shield(future)
 
-        # Leader executes the upstream fetch
-        assert future is not None
         try:
-            readings = await fetcher()
-            if not readings:
-                raise ValueError("Provider returned no readings")
-            self.set_l1(lat, lon, readings)
-            await self.set_l2_supabase(lat, lon, readings)
-            if not future.done():
-                future.set_result(readings)
+            readings = await self._fetch_or_fallback(lat, lon, fetcher)
+            future.set_result(readings)
             return readings
-        except Exception as err:
-            logger.warning("cache_fallback error_type=%s", type(err).__name__)
-            # On fetch failure, try stale L1 or Supabase L2 fallback
-            stale_l1 = self.get_l1(lat, lon, allow_stale=True)
-            if stale_l1:
-                if not future.done():
-                    future.set_result(stale_l1)
-                return stale_l1
-
-            stale_l2 = await self.get_l2_supabase(lat, lon)
-            if stale_l2:
-                self.set_l1(lat, lon, stale_l2, ttl_seconds=-1)
-                if not future.done():
-                    future.set_result(stale_l2)
-                return stale_l2
-
-            if not future.done():
-                future.set_exception(err)
-                future.exception()  # Retrieve leader-only exceptions without a warning.
-            raise err
         except asyncio.CancelledError:
             future.cancel()
+            raise
+        except Exception as err:
+            future.set_exception(err)
+            future.exception()  # Retrieve leader-only exceptions without a warning.
             raise
         finally:
             async with self._lock:

@@ -129,3 +129,23 @@ def test_fractional_fixed_schedule_uses_both_hours() -> None:
     result = optimize_daily_routine([activity], {7: 80, 8: 120}, current_aqi=160)
     assert result.activities[0].baseline_inhaled_pm25_ug == pytest.approx(60)
     assert result.activities[0].optimized_start_hour == 7.75
+
+
+def test_fractional_flexible_activity_uses_earliest_complete_lowest_window() -> None:
+    activity = ScheduledActivity(
+        id="walk",
+        name="Walk",
+        member_name="Parent",
+        scheduled_start_hour=7.25,
+        scheduled_end_hour=8.75,
+    )
+    hourly = {7: 100, 8: 140, 10: 5, 13: 70, 14: 70, 16: 70, 17: 70}
+
+    result = optimize_daily_routine([activity], hourly, current_aqi=160)
+
+    optimized = result.activities[0]
+    assert optimized.optimized_start_hour == 13
+    assert optimized.optimized_end_hour == 14.5
+    assert optimized.baseline_inhaled_pm25_ug == 216
+    assert optimized.optimized_inhaled_pm25_ug == 126
+    assert result.total_dose_reduction_ug == 90

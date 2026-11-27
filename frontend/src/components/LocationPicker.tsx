@@ -337,7 +337,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
               type="button"
               onClick={handleUseMyLocation}
               disabled={gpsLoading}
-              className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500 text-white font-bold text-xs flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-teal-400 shadow-xs cursor-pointer disabled:opacity-60 transition-colors"
+              className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-teal-400 shadow-xs cursor-pointer disabled:opacity-60 transition-colors"
             >
               {gpsLoading ? (
                 <>
@@ -447,7 +447,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
                       onClick={() => handleSelectSearchResult(item)}
                       className={`p-2 rounded-lg text-xs cursor-pointer flex items-center justify-between transition-colors ${
                         isFocused
-                          ? "bg-teal-700 text-white dark:bg-teal-600"
+                          ? "bg-teal-700 text-white"
                           : "text-[var(--text-primary)] hover:bg-[var(--bg-surface)]"
                       }`}
                     >

@@ -1,49 +1,73 @@
 import React, { useState } from "react";
-import { Wind, ShieldAlert, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
-import type { RoomCADRResult, RoomDimensions, RoomIndoorFactors } from "../api/types";
+import { Wind, ShieldAlert, CheckCircle2, Sparkles } from "lucide-react";
+import type {
+  RoomCADRResult,
+  RoomDimensions,
+  RoomIndoorFactors,
+} from "../api/types";
 import { MathDrawer } from "../common/MathDrawer";
 
 export interface IndoorAirGuideProps {
   initialGuidance: RoomCADRResult;
   initialDimensions?: RoomDimensions;
   initialFactors?: RoomIndoorFactors;
-  onRecalculate?: (dimensions: RoomDimensions, factors: RoomIndoorFactors, targetAch: number) => void;
+  error?: string | null;
+  onRetry?: () => void;
+  onRecalculate?: (
+    dimensions: RoomDimensions,
+    factors: RoomIndoorFactors,
+    targetAch: number,
+  ) => void;
 }
 
 export const IndoorAirGuide: React.FC<IndoorAirGuideProps> = ({
   initialGuidance,
-  initialDimensions = { length_m: 5.0, width_m: 4.0, height_m: 2.8 },
-  initialFactors = {
-    has_kitchen_chimney: true,
-    burns_incense_agarbatti: false,
-    has_unsealed_balcony: true,
-  },
+  initialDimensions = initialGuidance.dimensions,
+  initialFactors = initialGuidance.factors,
+  error,
+  onRetry,
   onRecalculate,
 }) => {
-  const [lengthM, setLengthM] = useState<number>(initialDimensions.length_m);
-  const [widthM, setWidthM] = useState<number>(initialDimensions.width_m);
-  const [heightM, setHeightM] = useState<number>(initialDimensions.height_m);
-  const [targetAch, setTargetAch] = useState<number>(initialGuidance.target_ach || 5.0);
-  const [hasChimney, setHasChimney] = useState<boolean>(initialFactors.has_kitchen_chimney);
-  const [burnsIncense, setBurnsIncense] = useState<boolean>(initialFactors.burns_incense_agarbatti);
-  const [unsealedBalcony, setUnsealedBalcony] = useState<boolean>(initialFactors.has_unsealed_balcony);
+  const [lengthM, setLengthM] = useState(String(initialDimensions.length_m));
+  const [widthM, setWidthM] = useState(String(initialDimensions.width_m));
+  const [heightM, setHeightM] = useState(String(initialDimensions.height_m));
+  const [targetAch, setTargetAch] = useState<number>(
+    initialGuidance.target_ach || 5.0,
+  );
+  const [hasChimney, setHasChimney] = useState<boolean>(
+    initialFactors.has_kitchen_chimney,
+  );
+  const [burnsIncense, setBurnsIncense] = useState<boolean>(
+    initialFactors.burns_incense_agarbatti,
+  );
+  const [unsealedBalcony, setUnsealedBalcony] = useState<boolean>(
+    initialFactors.has_unsealed_balcony,
+  );
 
-  // Local deterministic calculations for immediate feedback
-  const localVolumeM3 = Math.round(lengthM * widthM * heightM * 10) / 10;
-  const localCADRM3PerHr = initialGuidance.required_cadr_m3_per_hr;
-  const localCADRCFM = initialGuidance.required_cadr_cfm;
+  const {
+    dimensions: applied,
+    room_volume_m3: volume,
+    required_cadr_m3_per_hr: cadr,
+    required_cadr_cfm: cfm,
+    target_ach: appliedAch,
+    source_multiplier: multiplier,
+  } = initialGuidance;
 
   const handleApplyChanges = (e: React.FormEvent) => {
     e.preventDefault();
     if (onRecalculate) {
       onRecalculate(
-        { length_m: lengthM, width_m: widthM, height_m: heightM },
+        {
+          length_m: Number(lengthM),
+          width_m: Number(widthM),
+          height_m: Number(heightM),
+        },
         {
           has_kitchen_chimney: hasChimney,
           burns_incense_agarbatti: burnsIncense,
           has_unsealed_balcony: unsealedBalcony,
         },
-        targetAch
+        targetAch,
       );
     }
   };
@@ -59,12 +83,16 @@ export const IndoorAirGuide: React.FC<IndoorAirGuideProps> = ({
             <span className="p-1.5 rounded-lg bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-400">
               <Wind className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
             </span>
-            <h2 id="indoor-air-guide-title" className="text-lg sm:text-xl font-bold text-[var(--text-primary)]">
+            <h2
+              id="indoor-air-guide-title"
+              className="text-lg sm:text-xl font-bold text-[var(--text-primary)]"
+            >
               3. Indoor Air Quality & CADR Action Engine
             </h2>
           </div>
           <p className="text-xs text-[var(--text-secondary)] mt-1">
-            Deterministic Clean Air Delivery Rate (CADR), envelope infiltration control, and scientific plant footnotes.
+            Deterministic Clean Air Delivery Rate (CADR), envelope infiltration
+            control, and scientific plant footnotes.
           </p>
         </div>
       </div>
@@ -81,13 +109,16 @@ export const IndoorAirGuide: React.FC<IndoorAirGuideProps> = ({
                 Room Sizing & Household Environmental Factors
               </h3>
               <span className="text-xs text-[var(--text-secondary)] font-mono tabular-nums">
-                V = {localVolumeM3} m³ ({Math.round(localVolumeM3 * 35.3147)} ft³)
+                Applied volume: {volume} m³ ({Math.round(volume * 35.3147)} ft³)
               </span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
-                <label htmlFor="room-length" className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                <label
+                  htmlFor="room-length"
+                  className="block text-xs font-semibold text-[var(--text-secondary)] mb-1"
+                >
                   Length (m)
                 </label>
                 <input
@@ -97,13 +128,17 @@ export const IndoorAirGuide: React.FC<IndoorAirGuideProps> = ({
                   min="1.0"
                   max="20.0"
                   value={lengthM}
-                  onChange={(e) => setLengthM(Math.max(1.0, parseFloat(e.target.value) || 1.0))}
+                  required
+                  onChange={(e) => setLengthM(e.target.value)}
                   className="w-full min-h-[44px] px-3 py-1.5 text-xs bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-[var(--text-primary)] font-mono tabular-nums"
                 />
               </div>
 
               <div>
-                <label htmlFor="room-width" className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                <label
+                  htmlFor="room-width"
+                  className="block text-xs font-semibold text-[var(--text-secondary)] mb-1"
+                >
                   Width (m)
                 </label>
                 <input
@@ -113,13 +148,17 @@ export const IndoorAirGuide: React.FC<IndoorAirGuideProps> = ({
                   min="1.0"
                   max="20.0"
                   value={widthM}
-                  onChange={(e) => setWidthM(Math.max(1.0, parseFloat(e.target.value) || 1.0))}
+                  required
+                  onChange={(e) => setWidthM(e.target.value)}
                   className="w-full min-h-[44px] px-3 py-1.5 text-xs bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-[var(--text-primary)] font-mono tabular-nums"
                 />
               </div>
 
               <div>
-                <label htmlFor="room-height" className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                <label
+                  htmlFor="room-height"
+                  className="block text-xs font-semibold text-[var(--text-secondary)] mb-1"
+                >
                   Height (m)
                 </label>
                 <input
@@ -129,13 +168,17 @@ export const IndoorAirGuide: React.FC<IndoorAirGuideProps> = ({
                   min="1.0"
                   max="10.0"
                   value={heightM}
-                  onChange={(e) => setHeightM(Math.max(1.0, parseFloat(e.target.value) || 1.0))}
+                  required
+                  onChange={(e) => setHeightM(e.target.value)}
                   className="w-full min-h-[44px] px-3 py-1.5 text-xs bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-[var(--text-primary)] font-mono tabular-nums"
                 />
               </div>
 
               <div>
-                <label htmlFor="target-ach" className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                <label
+                  htmlFor="target-ach"
+                  className="block text-xs font-semibold text-[var(--text-secondary)] mb-1"
+                >
                   Target ACH
                 </label>
                 <select
@@ -187,10 +230,20 @@ export const IndoorAirGuide: React.FC<IndoorAirGuideProps> = ({
 
           <button
             type="submit"
-            className="w-full min-h-[44px] px-4 py-2 bg-teal-700 hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500 text-white text-xs font-bold rounded-xl transition-colors shadow-xs focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
+            className="w-full min-h-[44px] px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold rounded-xl transition-colors shadow-xs focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
           >
             Update CADR & Sealing Advisory
           </button>
+          {error && <p role="alert">{error}</p>}
+          {error && onRetry && (
+            <button
+              type="button"
+              className="min-h-[44px] underline"
+              onClick={onRetry}
+            >
+              Retry room calculation
+            </button>
+          )}
         </form>
 
         {/* Right Half: Deterministic Outputs */}
@@ -199,25 +252,32 @@ export const IndoorAirGuide: React.FC<IndoorAirGuideProps> = ({
           <div className="p-4 bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] dark:bg-[#0B2927] dark:text-[#5EEAD4] dark:border-[#115E59] rounded-xl space-y-2">
             <div className="flex justify-between items-center">
               <span className="text-xs uppercase tracking-wide font-bold flex items-center gap-1.5 text-[#065F46] dark:text-[#5EEAD4]">
-                <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" strokeWidth={1.75} aria-hidden="true" />
+                <CheckCircle2
+                  className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400"
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                />
                 Required Air Purifier CADR
               </span>
               <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200">
-                Target: {targetAch} ACH
+                Target: {appliedAch} ACH
               </span>
             </div>
 
             <div className="flex items-baseline gap-3">
               <div className="text-3xl sm:text-4xl font-black font-mono tabular-nums text-[#065F46] dark:text-[#5EEAD4]">
-                {localCADRM3PerHr} <span className="text-base font-normal">m³/h</span>
+                {cadr} <span className="text-base font-normal">m³/h</span>
               </div>
               <div className="text-sm font-semibold text-teal-800 dark:text-teal-300 font-mono tabular-nums">
-                ({localCADRCFM} CFM)
+                ({cfm} CFM)
               </div>
             </div>
 
             <p className="text-xs pt-1 border-t border-[#A7F3D0] dark:border-[#115E59] text-[#065F46] dark:text-[#5EEAD4]">
-              Sized for {localVolumeM3} m³ room volume ({lengthM}m × {widthM}m × {heightM}m). Provides {targetAch} full room air changes per hour.
+              Sized for {volume} m³ room volume ({applied.length_m}m ×{" "}
+              {applied.width_m}m × {applied.height_m}m). The sizing estimate
+              uses the {appliedAch} ACH target and a source multiplier of{" "}
+              {multiplier}.
             </p>
           </div>
 
@@ -225,13 +285,15 @@ export const IndoorAirGuide: React.FC<IndoorAirGuideProps> = ({
           <div className="p-4 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl space-y-2.5">
             <div>
               <div className="text-xs uppercase tracking-wide text-[var(--text-secondary)] font-bold flex items-center gap-1.5">
-                <ShieldAlert className="w-3.5 h-3.5 text-amber-600" strokeWidth={1.75} aria-hidden="true" />
+                <ShieldAlert
+                  className="w-3.5 h-3.5 text-amber-600"
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                />
                 Envelope Infiltration & Sealing
               </div>
               <p className="text-xs text-[var(--text-primary)] mt-1 leading-relaxed">
-                {unsealedBalcony
-                  ? "Seal entrance and balcony gaps with door sweeps and weatherstripping; reduction depends on leakage and ventilation."
-                  : initialGuidance.sealing_and_source_guidance}
+                {initialGuidance.sealing_and_source_guidance}
               </p>
             </div>
 
@@ -240,19 +302,9 @@ export const IndoorAirGuide: React.FC<IndoorAirGuideProps> = ({
                 Diurnal Ventilation Window
               </div>
               <p className="text-xs text-[var(--text-primary)] mt-0.5 leading-relaxed">
-                {initialGuidance.ventilation_recommendation ||
-                  "Ventilate exclusively during peak solar heating (1:00 PM – 3:30 PM) when atmospheric mixing layer expands and surface PM2.5 drops. Seal tightly during morning and night thermal inversions."}
+                {initialGuidance.ventilation_recommendation}
               </p>
             </div>
-
-            {burnsIncense && (
-              <div className="p-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg text-xs text-red-900 dark:text-red-200 font-medium flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" strokeWidth={1.75} aria-hidden="true" />
-                <div>
-                  <strong>Indoor Agarbatti Alert:</strong> Burning incense adds indoor particulate pollution. Stop burning it and control indoor sources before relying on filtration.
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -264,39 +316,63 @@ export const IndoorAirGuide: React.FC<IndoorAirGuideProps> = ({
         className="p-3.5 bg-[#FFFBEB] text-[#78350F] border border-[#FDE68A] dark:bg-[#2E1E05] dark:text-[#FDE68A] dark:border-[#92400E] rounded-xl text-xs leading-relaxed"
       >
         <strong className="block font-bold text-[#78350F] dark:text-[#FDE68A] mb-1 flex items-center gap-1.5">
-          <Sparkles className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" strokeWidth={1.75} aria-hidden="true" />
-          Scientific Footnote on NASA Air-Purifying Plants (Areca Palm, Snake Plant, Peace Lily):
+          <Sparkles
+            className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400"
+            strokeWidth={1.75}
+            aria-hidden="true"
+          />
+          Scientific Footnote on NASA Air-Purifying Plants (Areca Palm, Snake
+          Plant, Peace Lily):
         </strong>
-        {initialGuidance.plants_footnote ||
-          "The 1989 NASA Clean Air Study evaluated sealed, fan-assisted chambers over 24 hours. In real-world homes with standard air exchange rates (0.5–2.0 ACH), potted plants achieve negligible PM2.5 particulate reduction (<1%) and do NOT replace mechanical HEPA purifiers. Potted plants provide valuable biophilic and psychological benefits, but zero defense against severe particulate smog."}
+        {initialGuidance.plants_footnote}
       </div>
 
       {/* Expandable Show the Math Drawer */}
       <MathDrawer title="Show the Math: Room Volume, CADR Formula & ACH Benchmarks">
         <div>
-          <strong className="text-[var(--text-primary)]">1. Room Volume Calculation:</strong>
+          <strong className="text-[var(--text-primary)]">
+            1. Room Volume Calculation:
+          </strong>
           <code className="block bg-[var(--bg-surface)] p-2 rounded border border-[var(--border-subtle)] font-mono tabular-nums mt-1 text-[var(--text-primary)]">
-            Volume (m³) = Length ({lengthM}m) × Width ({widthM}m) × Height ({heightM}m) = {localVolumeM3} m³
+            Volume (m³) = Length ({applied.length_m}m) × Width (
+            {applied.width_m}m) × Height ({applied.height_m}m) = {volume} m³
           </code>
         </div>
 
         <div>
-          <strong className="text-[var(--text-primary)]">2. Deterministic CADR Formula:</strong>
+          <strong className="text-[var(--text-primary)]">
+            2. Deterministic CADR Formula:
+          </strong>
           <code className="block bg-[var(--bg-surface)] p-2 rounded border border-[var(--border-subtle)] font-mono tabular-nums mt-1 text-[var(--text-primary)]">
-            CADR (m³/h) = Volume ({initialGuidance.room_volume_m3} m³) × Target ACH ({initialGuidance.target_ach} h⁻¹) × configured source adjustment = {localCADRM3PerHr} m³/h
+            CADR (m³/h) = Volume ({initialGuidance.room_volume_m3} m³) × Target
+            ACH ({initialGuidance.target_ach} h⁻¹) × Source multiplier (
+            {multiplier}) = {cadr} m³/h
           </code>
           <code className="block bg-[var(--bg-surface)] p-2 rounded border border-[var(--border-subtle)] font-mono tabular-nums mt-1 text-[var(--text-primary)]">
-            CADR (CFM) = {localCADRM3PerHr} m³/h × 0.5886 = {localCADRCFM} CFM
+            CADR (CFM) = {cadr} m³/h × 0.5886 = {cfm} CFM
           </code>
         </div>
 
         <div className="p-2.5 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-lg text-teal-950 dark:text-teal-200">
-          <strong>Target ACH Benchmarks (AHAM AC-1 / ANSI Standards):</strong>
-          <ul className="list-disc list-inside mt-1 space-y-0.5">
-            <li>2.0–3.0 ACH: Maintenance level for sealed rooms on moderate air days.</li>
-            <li>4.0–5.0 ACH: Mandatory recommendation for severe North Indian winter smog episodes (AQI &gt; 300).</li>
-            <li>6.0+ ACH: Clinical requirement for acute asthma, COPD, and immunocompromised family members.</li>
-          </ul>
+          <strong>Target ACH Benchmarks</strong>
+          <p>
+            The selected ACH is a filtration sizing assumption. Actual particle
+            removal depends on room leakage, indoor sources, placement and
+            filter performance.
+          </p>
+          <p>
+            Applied sources: chimney{" "}
+            {initialGuidance.factors.has_kitchen_chimney ? "present" : "absent"}
+            , incense{" "}
+            {initialGuidance.factors.burns_incense_agarbatti
+              ? "used"
+              : "unused"}
+            , balcony{" "}
+            {initialGuidance.factors.has_unsealed_balcony
+              ? "unsealed"
+              : "sealed"}
+            .
+          </p>
         </div>
       </MathDrawer>
     </section>
