@@ -1,4 +1,4 @@
-"""Unit tests for Grok edge client, prompt delimiters, and deterministic fallback."""
+"""Unit tests for Groq edge client, prompt delimiters, and deterministic fallback."""
 
 import json
 from datetime import UTC, datetime
@@ -57,13 +57,23 @@ async def test_qwen_uses_groq_without_forwarding_its_key_to_xai(
     assert [str(request.url) for request in requests] == [
         "https://api.groq.com/openai/v1/chat/completions"
     ] * 2
-    assert client.provider == "groq"
     for request in requests:
         assert request.headers["Authorization"] == "Bearer gsk_test_fixture"
         payload = json.loads(request.content)
         assert payload["model"] == "qwen/qwen3-test-model"
         assert payload["reasoning_effort"] == "none"
         assert payload["reasoning_format"] == "hidden"
+
+
+@pytest.mark.asyncio
+async def test_non_groq_legacy_key_disables_generation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setenv("GROK_API_KEY", "legacy-xai-key")
+    monkeypatch.setenv("GROK_MODEL", "legacy-model")
+    client = GrokPlannerClient()
+
+    assert not client.api_key
+    assert await client.generate_structured("Return JSON", TravelChoice) is None
 
 
 @pytest.mark.asyncio
@@ -231,11 +241,10 @@ def test_prompt_injection_delimiter_defense() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("transport", ["gemini", "grok", "groq"])
 @pytest.mark.parametrize("invalid", ["locale", "aqi", "room"])
 @pytest.mark.parametrize("correct_on_retry", [True, False])
 async def test_briefing_retries_conflicts_and_only_returns_validated_copy(
-    monkeypatch: pytest.MonkeyPatch, transport: str, invalid: str, correct_on_retry: bool
+    monkeypatch: pytest.MonkeyPatch, invalid: str, correct_on_retry: bool
 ) -> None:
     station, aqi, conf, routine, commute, cadr, errands = _make_dummy_plan_inputs()
     args = ("Delhi", station, aqi, conf, routine, commute, cadr, errands, "english")
@@ -273,32 +282,18 @@ async def test_briefing_retries_conflicts_and_only_returns_validated_copy(
     def respond(request: httpx.Request) -> httpx.Response:
         requests.append(request)
         content = next(replies).model_dump_json()
-        if transport == "gemini":
-            assert request.url.host == "generativelanguage.googleapis.com"
-            return httpx.Response(
-                200, json={"candidates": [{"content": {"parts": [{"text": content}]}}]}
-            )
-        if transport == "groq":
-            assert request.url.host == "api.groq.com"
-            assert json.loads(request.content)["response_format"] == {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "narrative_briefings",
-                    "strict": True,
-                    "schema": NarrativeBriefings.model_json_schema(),
-                },
-            }
+        assert request.url.host == "api.groq.com"
+        assert json.loads(request.content)["response_format"] == {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "narrative_briefings",
+                "strict": True,
+                "schema": NarrativeBriefings.model_json_schema(),
+            },
+        }
         return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 
-    if transport == "gemini":
-        monkeypatch.setenv("GEMINI_API_KEY", "mock-key")
-        monkeypatch.setenv("GEMINI_MODEL", "test-model")
-    else:
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    if transport == "groq":
-        monkeypatch.setenv("GROQ_API_KEY", "gsk_test_fixture")
-        monkeypatch.setenv("GROQ_MODEL", "qwen/qwen3.8-test-fixture")
-    client = GrokPlannerClient(api_key="mock-key", model="test-model")
+    client = GrokPlannerClient(api_key="gsk_test_fixture", model="qwen/qwen3.8-test-fixture")
     original = httpx.AsyncClient
     monkeypatch.setattr(
         httpx, "AsyncClient", lambda **kwargs: original(transport=httpx.MockTransport(respond))
@@ -322,15 +317,15 @@ async def test_briefing_retries_conflicts_and_only_returns_validated_copy(
 
 
 @pytest.mark.asyncio
-async def test_grok_malformed_json_triggers_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that malformed JSON or HTTP error from Grok cleanly serves deterministic fallback."""
+async def test_groq_malformed_json_triggers_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that malformed JSON or HTTP error from Groq cleanly serves deterministic fallback."""
     station, aqi, conf, routine, commute, cadr, errands = _make_dummy_plan_inputs()
 
-    class MockBadGrokClient:
+    class MockBadGroqClient:
         def __init__(self, *args, **kwargs) -> None:
             pass
 
-        async def __aenter__(self) -> "MockBadGrokClient":
+        async def __aenter__(self) -> "MockBadGroqClient":
             return self
 
         async def __aexit__(self, *args) -> None:
@@ -342,7 +337,7 @@ async def test_grok_malformed_json_triggers_fallback(monkeypatch: pytest.MonkeyP
                 200, json={"choices": [{"message": {"content": "INVALID { JSON"}}]}
             )
 
-    monkeypatch.setattr(httpx, "AsyncClient", MockBadGrokClient)
+    monkeypatch.setattr(httpx, "AsyncClient", MockBadGroqClient)
 
     client = GrokPlannerClient(api_key="mock-key", model="test-model")
     wa_card, comm_brief, cards = await client.generate_plan_briefings(
@@ -364,8 +359,8 @@ async def test_grok_malformed_json_triggers_fallback(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
-async def test_grok_successful_briefing_generation(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that a valid JSON response from Grok properly validates and returns structured cards."""
+async def test_groq_successful_briefing_generation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that a valid JSON response from Groq properly validates and returns structured cards."""
     station, aqi, conf, routine, commute, cadr, errands = _make_dummy_plan_inputs()
 
     valid_response_data = {
@@ -389,11 +384,11 @@ async def test_grok_successful_briefing_generation(monkeypatch: pytest.MonkeyPat
         ]
     }
 
-    class MockGoodGrokClient:
+    class MockGoodGroqClient:
         def __init__(self, *args, **kwargs) -> None:
             pass
 
-        async def __aenter__(self) -> "MockGoodGrokClient":
+        async def __aenter__(self) -> "MockGoodGroqClient":
             return self
 
         async def __aexit__(self, *args) -> None:
@@ -402,7 +397,7 @@ async def test_grok_successful_briefing_generation(monkeypatch: pytest.MonkeyPat
         async def post(self, url: str, *args, **kwargs) -> httpx.Response:
             return httpx.Response(200, json=valid_response_data)
 
-    monkeypatch.setattr(httpx, "AsyncClient", MockGoodGrokClient)
+    monkeypatch.setattr(httpx, "AsyncClient", MockGoodGroqClient)
 
     client = GrokPlannerClient(api_key="mock-key", model="test-model")
     wa_card, comm_brief, cards = await client.generate_plan_briefings(

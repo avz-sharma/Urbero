@@ -20,8 +20,6 @@ def _create_app(model_transport: httpx.AsyncClient) -> FastAPI:
             "SUPABASE_SERVICE_ROLE_KEY",
             "GROK_API_KEY",
             "GROQ_API_KEY",
-            "XAI_API_KEY",
-            "GEMINI_API_KEY",
         ),
         "",
     )

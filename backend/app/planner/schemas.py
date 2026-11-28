@@ -174,7 +174,7 @@ class TravelChoice(BaseModel):
     priority: Literal["exposure", "emissions", "time", "balance"]
 
 
-PlannerProvider = Literal["grok", "gemini", "groq"]
+PlannerProvider = Literal["groq"]
 
 
 class TravelAdviceResponse(BaseModel):

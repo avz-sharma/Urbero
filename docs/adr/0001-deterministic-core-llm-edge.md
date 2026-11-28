@@ -27,7 +27,7 @@ We enforce a strict separation of concerns following the **Deterministic Core, L
    - 100% testable via unit tests, golden-value regression fixtures, and `Hypothesis` property-based tests.
 
 2. **LLM at the Edge (`backend/app/planner/grok.py`):**
-   - Grok (xAI) operates strictly as a narrative translation, personalization, and summarization layer.
+   - Qwen on Groq operates strictly as a narrative translation, personalization, and summarization layer.
    - All mathematical figures, pollutant levels, doses, and trade-offs are passed into prompts as pre-computed, immutable JSON facts.
    - Prompts strictly forbid the LLM from calculating or altering numerical metrics.
    - Outputs are strictly constrained by structured JSON schemas validated against Pydantic v2 models.

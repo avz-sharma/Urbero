@@ -2418,8 +2418,6 @@
           "source": {
             "type": "string",
             "enum": [
-              "grok",
-              "gemini",
               "groq",
               "fallback_template"
             ],

@@ -1104,7 +1104,7 @@ export interface components {
              * Source
              * @enum {string}
              */
-            source: "grok" | "gemini" | "groq" | "fallback_template";
+            source: "groq" | "fallback_template";
             /** Smog Advisory */
             smog_advisory: string;
         };

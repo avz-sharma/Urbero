@@ -18,7 +18,7 @@ python -m uvicorn backend.app.api.routes:app --reload --port 8000 --no-access-lo
 npm --prefix frontend run dev
 ```
 
-Open http://localhost:5173 and choose a location. Then optionally apply a household preset to load an example schedule for that location. In Routine & Commute, edit activities by local start and end time or ask for travel advice. Metro appears in known operating areas. WAQI requires an operator-owned `WAQI_API_TOKEN`. The app uses labelled CAMS model estimates when a current station reading is unavailable. Configure Groq with `GROQ_API_KEY` and `GROQ_MODEL` to generate Qwen briefings and travel suggestions. Groq takes precedence when configured. The server also supports Gemini (`GEMINI_API_KEY`, `GEMINI_MODEL`) and xAI (`GROK_API_KEY`, `GROK_MODEL`). Deployments with an existing `gsk_` key stored under `GROK_API_KEY` can continue using `GROK_MODEL` during migration to the Groq variables. Deterministic templates cover disabled or failed generation.
+Open http://localhost:5173 and choose a location. Then optionally apply a household preset to load an example schedule for that location. In Routine & Commute, edit activities by local start and end time or ask for travel advice. Metro appears in known operating areas. WAQI requires an operator-owned `WAQI_API_TOKEN`. The app uses labelled CAMS model estimates when a current station reading is unavailable. Configure Groq with `GROQ_API_KEY` and `GROQ_MODEL` to generate Qwen briefings and travel suggestions. Deployments with an existing `gsk_` key stored under `GROK_API_KEY` can continue using `GROK_MODEL` during migration to the Groq variables. Deterministic templates cover disabled or failed generation.
 
 Run all seven requested gates with `python scripts/verify.py` (or `make verify`). Complete output is saved to [docs/audit-verification.md](docs/audit-verification.md). Python tools use module invocation because executable launchers fail with DLL relocation errors on this Windows installation.
 
@@ -34,7 +34,7 @@ npm test
 npm run build
 ```
 
-Coverage below 90% fails verification. The test suite replays recorded CAMS data, WAQI protocol cases and Gemini responses without provider credentials. The pure AQI and exposure engines have import-isolation, boundary and Hypothesis tests. CI checks the landing page at Lighthouse accessibility ≥95 and tests the location gate, preset selection and keyboard tab navigation in Chromium at 390 px and 1440 px. Vitest runs `jest-axe` against the landing page, location gate and all four tabs in both themes. See [the browser gate](.github/workflows/ci.yml) for the pinned Playwright and Lighthouse commands.
+Coverage below 90% fails verification. The test suite replays recorded CAMS data, WAQI protocol cases and Groq responses without provider credentials. The pure AQI and exposure engines have import-isolation, boundary and Hypothesis tests. CI checks the landing page at Lighthouse accessibility ≥95 and tests the location gate, preset selection and keyboard tab navigation in Chromium at 390 px and 1440 px. Vitest runs `jest-axe` against the landing page, location gate and all four tabs in both themes. See [the browser gate](.github/workflows/ci.yml) for the pinned Playwright and Lighthouse commands.
 
 Regenerate the single-source API types with `npm --prefix frontend run generate:api`. Never hand-edit `frontend/src/api/generated.ts`.
 
@@ -54,7 +54,7 @@ flowchart TD
     CAMS --> Core
     CAMS --> History[Last 72h archived model output]
     History --> Optimizer[History-derived daylight slot enumeration]
-    Core --> Edge[Validated Gemini or Grok narrative / deterministic fallback]
+    Core --> Edge[Validated Groq Qwen narrative / deterministic fallback]
     Edge --> UI[Four tabs / confidence / provenance / Show the Math]
 ```
 
@@ -82,7 +82,7 @@ flowchart TD
 | CADR applied dimensions, source adjustment, retry and plants footnote | `exposure/cadr.py`, `IndoorAirGuide/`, `App.tsx` | `test_cadr.py`, `IndoorAirGuide.test.tsx`, `App.test.tsx` |
 | Manual errand stops, fixed-window feasibility, applied emissions and dose change | `exposure/errands.py`, `LowEmissionRoutine/ErrandEditor.tsx`, `LowEmissionRoutine/ErrandLoop.tsx` | `test_errands.py`, `test_integrity.py`, `test_api_routes.py`, `App.test.tsx` |
 | Planet vs. Lungs comparisons | `exposure/commute.py`, `LowEmissionRoutine/` | `test_commute.py`, `LowEmissionRoutine.test.tsx` |
-| Structured Groq, Gemini and xAI JSON, retry, fallback briefings and travel advice | `planner/gemini.py`, `planner/grok.py`, `planner/fallback.py` | `test_gemini.py`, `test_planner.py`, `test_api_failures.py` |
+| Structured Groq Qwen JSON, retry, fallback briefings and travel advice | `planner/grok.py`, `planner/fallback.py` | `test_planner.py`, `test_api_failures.py` |
 | API response contracts, daily-plan assembly, size limits, CSP and privacy-safe throttling | `planner/schemas.py`, `api/routes.py`, `api/daily_plan.py`, `api/security.py` | `test_api_routes.py`, `test_api_failures.py`, `test_browser_security.py` |
 | Location gate, GPS/search/chips, unselected presets | `App.tsx`, `components/LocationPicker.tsx`, `HouseholdProfile/`, `providers/geocoding.py` | `App.test.tsx`, `LocationPicker.test.tsx`, `HouseholdProfile.test.tsx`, `test_geocoding.py` |
 | Four tabs, keyboard focus, chart/table alternatives, light and dark accessibility | `components/DashboardShell.tsx`, `LowEmissionRoutine/`, `scripts/check-ui.mjs` | `DashboardShell.test.tsx`, `LowEmissionRoutine.test.tsx`, `App.test.tsx`, Playwright and Lighthouse |
@@ -98,8 +98,8 @@ Backend paths above are relative to `backend/app/`; frontend component paths are
 - [WAQI API contract, attribution and usage terms](https://aqicn.org/api/); [published PM scale](https://aqicn.org/faq/2013-09-09/revised-pm25-aqi-breakpoints/).
 - [Open-Meteo air quality contract](https://open-meteo.com/en/docs/air-quality-api), including CAMS attribution, units and archived model output. Check the applicable free/non-commercial or paid-service terms before deployment.
 - [CPCB National AQI](https://cpcb.nic.in/National-Air-Quality-Index/); [WHO 2021 guidelines](https://www.who.int/publications/i/item/9789240034228); [Berkeley Earth heuristic](https://berkeleyearth.org/air-pollution-and-cigarette-equivalence/).
-- [India NAAQS PM₂.₅ reference](https://cpcb.nic.in/upload/NAAQS_2019.pdf), [NASA chamber study on plants and indoor VOCs](https://ntrs.nasa.gov/citations/19930072988), [Gemini structured output](https://ai.google.dev/gemini-api/docs/structured-output).
+- [India NAAQS PM₂.₅ reference](https://cpcb.nic.in/upload/NAAQS_2019.pdf), [NASA chamber study on plants and indoor VOCs](https://ntrs.nasa.gov/citations/19930072988).
 
 `VERIFY_BEFORE_PROD`: validate the deployment WAQI token and confirm its feed scale/version, averaging metadata and caching permissions; calibrate scenario assumptions. A provider index cannot recover missing raw precision or certify regulatory averaging. No claim of live WAQI credential validation or full WCAG certification follows from fixture/axe tests.
 
-Cloud Run configuration uses `min-instances=1`, server-side secrets, and a non-root container. FastAPI serves the built frontend. For optional shared caching, provision `public.station_cache(cache_key text primary key, payload jsonb not null)` with access restricted to the server service role. It stores provider readings, CAMS model data, and public city/locality results. Shared search keys are keyed hashes, and reverse lookups use a two-decimal grid. Gemini travel selections use a 15-minute in-memory cache keyed by AQI category, rounded PM₂.₅, exact trip distance, eligible modes and a digest of the question. Briefings use the current facts for each request.
+Cloud Run configuration uses `min-instances=1`, server-side secrets, and a non-root container. FastAPI serves the built frontend. For optional shared caching, provision `public.station_cache(cache_key text primary key, payload jsonb not null)` with access restricted to the server service role. It stores provider readings, CAMS model data, and public city/locality results. Shared search keys are keyed hashes, and reverse lookups use a two-decimal grid. Briefings use the current facts for each request.

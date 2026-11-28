@@ -32,28 +32,15 @@ spec:
           env:
             - name: ENVIRONMENT
               value: "production"
-            - name: GEMINI_MODEL
+            - name: GROQ_MODEL
               valueFrom:
                 secretKeyRef:
-                  name: urbero-gemini-model
+                  name: urbero-groq-model
                   key: latest
-            - name: GEMINI_API_KEY
+            - name: GROQ_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: urbero-gemini-key
-                  key: latest
-            - name: GROK_MODEL
-              valueFrom:
-                secretKeyRef:
-                  name: urbero-grok-model
-                  key: latest
-            - name: GROK_BASE_URL
-              value: "https://api.x.ai/v1"
-            # Secrets sourced securely from GCP Secret Manager (Zero hardcoding)
-            - name: GROK_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: urbero-grok-key
+                  name: urbero-groq-key
                   key: latest
             - name: WAQI_API_TOKEN
               valueFrom:

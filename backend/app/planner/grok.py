@@ -11,9 +11,7 @@ import logging
 import os
 import re
 from collections.abc import Callable
-from hashlib import sha256
 from html import escape
-from time import monotonic
 from typing import Literal, TypeVar
 from unicodedata import normalize
 
@@ -26,20 +24,17 @@ from backend.app.config.constants import (
     DISCLAIMER_CIGARETTE_HEURISTIC,
     DISCLAIMER_EXPOSURE_BASELINES,
     DISCLAIMER_SMOG_EPISODE,
-    GROK_DEFAULT_BASE_URL,
-    GROK_TIMEOUT_SECONDS,
     GROQ_BASE_URL,
+    GROQ_TIMEOUT_SECONDS,
 )
 from backend.app.exposure.cadr import RoomCADRResult
 from backend.app.exposure.commute import CommuteModeComparison
 from backend.app.exposure.errands import MergedErrandsResult
 from backend.app.exposure.optimizer import RoutineOptimizationResult
 from backend.app.planner.fallback import generate_deterministic_fallback
-from backend.app.planner.gemini import GeminiClient, validate_model_response
 from backend.app.planner.schemas import (
     CommunityBrief,
     NarrativeBriefings,
-    PlannerProvider,
     RecommendationCard,
     StationMetadataSchema,
     TravelChoice,
@@ -164,31 +159,18 @@ class GrokPlannerClient:
         self,
         api_key: str | None = None,
         model: str | None = None,
-        base_url: str | None = None,
     ) -> None:
-        self.gemini = GeminiClient()
-        self._travel_choices: dict[bytes, tuple[float, TravelChoice]] = {}
-        grok_key = (api_key or os.getenv("GROK_API_KEY") or os.getenv("XAI_API_KEY") or "").strip()
-        groq_key = os.getenv("GROQ_API_KEY", "").strip()
-        # Earlier deployments stored their Groq credential under the similar Grok name.
-        legacy_groq = grok_key.startswith("gsk_")
-        self.provider: PlannerProvider
-        if groq_key or legacy_groq:
-            self.provider = "groq"
-            self.api_key = groq_key or grok_key
-            legacy_model = (model or os.getenv("GROK_MODEL", "")) if legacy_groq else ""
-            self.model = (os.getenv("GROQ_MODEL") or legacy_model or "").strip()
-            self.base_url = GROQ_BASE_URL
-        else:
-            self.provider = "gemini" if self.gemini.api_key else "grok"
-            self.api_key = grok_key
-            self.model = (model or os.getenv("GROK_MODEL") or "").strip()
-            self.base_url = (
-                base_url or os.getenv("GROK_BASE_URL") or GROK_DEFAULT_BASE_URL
-            ).rstrip("/")
+        # Older deployments stored a Groq key under the similar Grok variable name.
+        legacy_key = os.getenv("GROK_API_KEY", "").strip()
+        legacy_groq = legacy_key.startswith("gsk_")
+        self.api_key = (
+            api_key or os.getenv("GROQ_API_KEY") or (legacy_key if legacy_groq else "")
+        ).strip()
+        legacy_model = os.getenv("GROK_MODEL", "") if legacy_groq else ""
+        self.model = (model or os.getenv("GROQ_MODEL") or legacy_model).strip()
         if self.api_key and not self.model:
-            raise ValueError("Set the server-side model ID for the configured chat API.")
-        self.endpoint = f"{self.base_url}/chat/completions"
+            raise ValueError("Set GROQ_MODEL to a valid Groq model ID.")
+        self.endpoint = f"{GROQ_BASE_URL}/chat/completions"
 
     async def choose_travel_mode(
         self,
@@ -200,29 +182,13 @@ class GrokPlannerClient:
         *,
         aqi_category: str = "Unknown",
     ) -> TravelChoice | None:
-        if not options or not (self.api_key or self.gemini.api_key):
+        if not options or not self.api_key:
             return None
 
         eligible = {option.mode for option in options}
 
         def accept_choice(choice: TravelChoice) -> bool:
             return choice.mode in eligible
-
-        cache_key = None
-        if self.provider == "gemini":
-            cache_fields = {
-                "question": question.strip(),
-                "modes": sorted(eligible),
-                "distance": options[0].distance_km,
-                "pm25_bucket": round(pm25 / 5) * 5,
-                "category": aqi_category,
-                "status": reading_status,
-                "smog": smog,
-            }
-            cache_key = sha256(json.dumps(cache_fields, sort_keys=True).encode()).digest()
-            cached = self._travel_choices.get(cache_key)
-            if cached and cached[0] > monotonic():
-                return cached[1]
 
         instructions = (
             "Select one eligible travel mode based on the user's preferences and supplied estimates. "
@@ -244,16 +210,6 @@ class GrokPlannerClient:
             f"Eligible options and estimates: {facts}\n"
             f"<untrusted_input>{escape(question, quote=False)}</untrusted_input>"
         )
-        if cache_key is not None:
-            choice = await self.gemini.generate(
-                f"{instructions}\n{user_content}", TravelChoice, accept=accept_choice
-            )
-            if choice:
-                self._travel_choices[cache_key] = (monotonic() + 900, choice)
-                if len(self._travel_choices) > 128:
-                    self._travel_choices.pop(next(iter(self._travel_choices)))
-            return choice
-
         task: dict[str, object] = {
             "model": self.model,
             "messages": [
@@ -277,14 +233,14 @@ class GrokPlannerClient:
         language: str = "english",
         untrusted_notes: str | None = None,
     ) -> tuple[WhatsAppFamilyCard, CommunityBrief, list[RecommendationCard]]:
-        """Generate personalized narratives via Grok with automatic fallback on failure."""
+        """Generate personalized narratives via Groq with automatic fallback on failure."""
         lang_lit: Literal["english", "hinglish"] = (
             "hinglish" if language.lower() == "hinglish" else "english"
         )
         fallback = generate_deterministic_fallback(
             city, station, aqi, confidence, routine, commute_options, cadr, errands, lang_lit
         )
-        if not self.api_key and not self.gemini.api_key:
+        if not self.api_key:
             return fallback
 
         prompt = build_edge_prompt(
@@ -310,7 +266,7 @@ class GrokPlannerClient:
         if briefings is None:
             logger.info("planner_narrative status=fallback_template")
             return fallback
-        logger.info("planner_narrative provider=%s status=generated", self.provider)
+        logger.info("planner_narrative provider=groq status=generated")
         wa_card = briefings.whatsapp_card
         comm_brief = briefings.community_brief
         wa_card.current_aqi_badge = fallback[0].current_aqi_badge
@@ -341,8 +297,6 @@ class GrokPlannerClient:
         self, prompt: str, response_type: type[T], *, accept: Callable[[T], bool] | None = None
     ) -> T | None:
         """Use the configured narrative transport and validate one candidate per attempt."""
-        if self.provider == "gemini":
-            return await self.gemini.generate(prompt, response_type, accept=accept)
         if not self.api_key:
             return None
         payload: dict[str, object] = {
@@ -356,22 +310,21 @@ class GrokPlannerClient:
     async def _generate_chat(
         self, payload: dict[str, object], response_type: type[T], accept: Callable[[T], bool] | None
     ) -> T | None:
-        if self.provider == "groq":
-            payload["max_completion_tokens"] = 128 if response_type is TravelChoice else 1024
-            if self.model.startswith("qwen/qwen3"):
-                payload.update(reasoning_effort="none", reasoning_format="hidden")
-            # Groq supports constrained JSON decoding on Qwen 3.8.
-            if self.model.startswith("qwen/qwen3.8-") and response_type is NarrativeBriefings:
-                payload["response_format"] = {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "narrative_briefings",
-                        "strict": True,
-                        "schema": response_type.model_json_schema(),
-                    },
-                }
+        payload["max_completion_tokens"] = 128 if response_type is TravelChoice else 1024
+        if self.model.startswith("qwen/qwen3"):
+            payload.update(reasoning_effort="none", reasoning_format="hidden")
+        # Groq supports constrained JSON decoding on Qwen 3.8.
+        if self.model.startswith("qwen/qwen3.8-") and response_type is NarrativeBriefings:
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "narrative_briefings",
+                    "strict": True,
+                    "schema": response_type.model_json_schema(),
+                },
+            }
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(GROK_TIMEOUT_SECONDS, connect=3)
+            timeout=httpx.Timeout(GROQ_TIMEOUT_SECONDS, connect=3)
         ) as client:
             for attempt in range(2):
                 try:
@@ -382,11 +335,13 @@ class GrokPlannerClient:
                     )
                     if response.status_code == 200:
                         raw = response.json()["choices"][0]["message"]["content"]
-                        return validate_model_response(raw, response_type, accept)
+                        result = response_type.model_validate_json(raw, strict=True)
+                        if accept is None or accept(result):
+                            return result
+                        raise ValueError("Model response does not satisfy request constraints")
                     status = response.status_code
                     logger.warning(
-                        "planner_generation_failed provider=%s attempt=%s status=%s",
-                        self.provider,
+                        "planner_generation_failed provider=groq attempt=%s status=%s",
                         attempt + 1,
                         status,
                     )
@@ -394,8 +349,7 @@ class GrokPlannerClient:
                         return None
                 except (httpx.HTTPError, ValueError, TypeError, KeyError, IndexError) as err:
                     logger.warning(
-                        "planner_generation_failed provider=%s attempt=%s error_type=%s",
-                        self.provider,
+                        "planner_generation_failed provider=groq attempt=%s error_type=%s",
                         attempt + 1,
                         type(err).__name__,
                     )
