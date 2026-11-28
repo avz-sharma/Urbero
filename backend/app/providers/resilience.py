@@ -1,10 +1,32 @@
-"""Bounded retries and cooldown for transient upstream GET failures."""
+"""Bounded retries and coalescing for upstream requests."""
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from time import monotonic
+from typing import Any, TypeVar
 
 import httpx
+
+K = TypeVar("K")
+T = TypeVar("T")
+
+
+async def coalesce(
+    tasks: dict[K, asyncio.Task[T]], key: K, fetch: Callable[[], Coroutine[Any, Any, T]]
+) -> T:
+    """Share an in-flight fetch without tying it to any individual caller."""
+    task = tasks.get(key)
+    if task is None:
+        task = asyncio.create_task(fetch())
+        tasks[key] = task
+
+        def clear_task(completed: asyncio.Task[T]) -> None:
+            tasks.pop(key, None)
+            if not completed.cancelled():
+                completed.exception()  # Observe failures even when all callers cancelled.
+
+        task.add_done_callback(clear_task)
+    return await asyncio.shield(task)
 
 
 class UpstreamUnavailable(RuntimeError):

@@ -1,5 +1,6 @@
 """Tests for Phase 6 Room Vision analysis and security guardrails."""
 
+import base64
 import io
 
 import pytest
@@ -75,7 +76,8 @@ def test_analyze_room_photo_deterministic_fallback() -> None:
     assert "manually" in res.rejection_reason
 
 
-def test_analyze_room_photo_mock_grok() -> None:
+@pytest.mark.parametrize(("image_format", "mime"), [("JPEG", "image/jpeg"), ("WEBP", "image/webp")])
+def test_analyze_room_photo_mock_grok(image_format: str, mime: str) -> None:
     """Verify Grok client structured output extraction with prompt injection defense."""
 
     class MockMessage:
@@ -98,6 +100,12 @@ def test_analyze_room_photo_mock_grok() -> None:
             # Verify system prompt instructs injection defense
             prompt_text = messages[0]["content"][0]["text"]
             assert "UNTRUSTED CONTENT" in prompt_text
+            image_url = messages[0]["content"][1]["image_url"]["url"]
+            prefix, encoded = image_url.split(",", 1)
+            assert prefix == f"data:{mime};base64"
+            with Image.open(io.BytesIO(base64.b64decode(encoded))) as image:
+                assert image.format == image_format
+                assert not image.getexif()
             return MockResponse()
 
     class MockChat:
@@ -107,8 +115,12 @@ def test_analyze_room_photo_mock_grok() -> None:
         chat = MockChat()
         vision_model = "grok-2-vision-1212"
 
-    raw = _create_test_image("JPEG")
-    res = analyze_room_photo(raw, "image/jpeg", grok_client=MockGrokClient())
+    raw = io.BytesIO()
+    with Image.new("RGB", (100, 100), color="blue") as image:
+        exif = image.getexif()
+        exif[270] = "Example room photo"
+        image.save(raw, format=image_format, exif=exif)
+    res = analyze_room_photo(raw.getvalue(), mime, grok_client=MockGrokClient())
     assert res.is_valid_room is True
     assert res.estimated_length_m == 5.5
     assert res.has_kitchen_chimney is True

@@ -14,6 +14,9 @@ from pydantic import BaseModel, Field
 from backend.app.config.constants import COMMUTE_CO2_GRAMS_PER_KM
 
 MAX_ERRAND_STOPS: Final[int] = 4
+# Scenario assumptions shared by separate trips and the merged loop.
+ERRAND_TRAVEL_SPEED_KMH: Final[float] = 25.0
+ERRAND_BREATHING_RATE_M3_PER_HR: Final[float] = 0.70
 
 
 class ErrandStop(BaseModel):
@@ -64,7 +67,7 @@ def _evaluate_order(
             else _estimate_interstop_distance(previous, stop.distance_from_home_km)
         )
         distance += leg
-        clock += leg / 25.0
+        clock += leg / ERRAND_TRAVEL_SPEED_KMH
         if stop.window_open_hour is not None:
             clock = max(clock, stop.window_open_hour)
         clock += stop.duration_minutes / 60
@@ -73,7 +76,7 @@ def _evaluate_order(
         previous = stop.distance_from_home_km
 
     distance += previous
-    clock += previous / 25
+    clock += previous / ERRAND_TRAVEL_SPEED_KMH
     if clock > end_hour + 1e-9:
         return None
     return round(distance, 2), clock
@@ -138,12 +141,16 @@ def optimize_errands(
     co2_saved = round(distance_saved * co2_factor, 1)
 
     # Baseline separate trips taken at peak hours.
-    baseline_travel_hours = baseline_distance / 25.0
+    baseline_travel_hours = baseline_distance / ERRAND_TRAVEL_SPEED_KMH
     baseline_exposure_hours = baseline_travel_hours + (total_activity_mins / 60.0)
-    baseline_dose = round(peak_smog_avg_pm25 * 0.70 * baseline_exposure_hours, 1)
+    baseline_dose = round(
+        peak_smog_avg_pm25 * ERRAND_BREATHING_RATE_M3_PER_HR * baseline_exposure_hours, 1
+    )
 
     # Consolidated loop scheduled in the cleanest window, including waiting.
-    optimized_dose = round(cleanest_window_avg_pm25 * 0.70 * total_loop_duration_hours, 1)
+    optimized_dose = round(
+        cleanest_window_avg_pm25 * ERRAND_BREATHING_RATE_M3_PER_HR * total_loop_duration_hours, 1
+    )
     dose_reduction_pct = (
         round(((baseline_dose - optimized_dose) / baseline_dose) * 100.0, 1)
         if baseline_dose > 0

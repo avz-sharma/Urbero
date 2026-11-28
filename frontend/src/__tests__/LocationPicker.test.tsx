@@ -21,6 +21,94 @@ describe("LocationPicker Component & Accessibility", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  function mockGps() {
+    const position = { coords: { latitude: 28.6123, longitude: 77.2087 } };
+    const geolocation = {
+      getCurrentPosition: vi.fn((success: (result: typeof position) => void) =>
+        success(position),
+      ),
+    };
+    vi.stubGlobal("navigator", { ...navigator, geolocation });
+  }
+
+  it.each([
+    ["success", "Connaught Place, Delhi"],
+    ["non-2xx response", "Current Location"],
+    ["network error", "GPS Location"],
+  ])("selects the GPS coordinates after a %s", async (outcome, label) => {
+    mockGps();
+    const reverseGeocode = vi.fn();
+    if (outcome === "success") {
+      reverseGeocode.mockResolvedValue(Response.json({ label, city: "Delhi" }));
+    } else if (outcome === "non-2xx response") {
+      reverseGeocode.mockResolvedValue(new Response(null, { status: 503 }));
+    } else {
+      reverseGeocode.mockRejectedValue(new Error("Network unavailable"));
+    }
+    vi.stubGlobal("fetch", reverseGeocode);
+    render(
+      <LocationPicker
+        activeLocation={null}
+        gate
+        onSelectLocation={mockOnSelectLocation}
+      />,
+    );
+
+    await userEvent.setup().click(
+      screen.getByRole("button", { name: "Use My Live Location" }),
+    );
+
+    expect(reverseGeocode.mock.calls[0][0]).toBe(
+      "/api/locations/reverse?lat=28.61&lon=77.21",
+    );
+    expect(mockOnSelectLocation.mock.calls).toEqual([
+      [{ label, lat: 28.6123, lon: 77.2087, origin: "gps" }],
+    ]);
+  });
+
+  it("keeps a manual selection when an older GPS response finishes parsing", async () => {
+    mockGps();
+    let finishGps: (data: { label: string }) => void = () => {};
+    const reverseBody = new Promise<{ label: string }>((resolve) => {
+      finishGps = resolve;
+    });
+    const parseGps = vi.fn(() => reverseBody);
+    const reverseGeocode = vi.fn().mockResolvedValue({ ok: true, json: parseGps });
+    vi.stubGlobal("fetch", reverseGeocode);
+    const user = userEvent.setup();
+    render(
+      <LocationPicker
+        activeLocation={null}
+        gate
+        onSelectLocation={mockOnSelectLocation}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Use My Live Location" }),
+    );
+    expect(parseGps).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Noida" }));
+    expect(reverseGeocode).toHaveBeenCalledTimes(1);
+    expect(reverseGeocode.mock.calls[0][1].signal.aborted).toBe(true);
+    await act(async () => finishGps({ label: "Connaught Place, Delhi" }));
+
+    expect(mockOnSelectLocation.mock.calls).toEqual([
+      [
+        {
+          label: "Noida (Sector 62)",
+          lat: 28.5355,
+          lon: 77.391,
+          origin: "search",
+        },
+      ],
+    ]);
+    expect(
+      screen.getByRole("button", { name: "Use My Live Location" }),
+    ).toBeEnabled();
   });
 
   it("renders trigger pill with label, distance, and live badge", () => {
@@ -162,6 +250,13 @@ describe("LocationPicker Component & Accessibility", () => {
         lat: 28.627,
         lon: 77.362,
       },
+      {
+        label: "Sector 63, Noida, Uttar Pradesh",
+        city: "Noida",
+        state: "Uttar Pradesh",
+        lat: 28.634,
+        lon: 77.371,
+      },
     ];
 
     vi.stubGlobal(
@@ -182,6 +277,7 @@ describe("LocationPicker Component & Accessibility", () => {
     await user.click(screen.getByRole("button", { name: /Change location/i }));
 
     const input = screen.getByRole("combobox");
+    expect(input).toHaveFocus();
     await user.type(input, "Sector 62");
 
     await waitFor(() => {
@@ -192,7 +288,11 @@ describe("LocationPicker Component & Accessibility", () => {
       screen.getByText("Sector 62, Noida, Uttar Pradesh"),
     ).toBeInTheDocument();
 
-    // Keyboard navigation: ArrowDown then Enter
+    // From no active option, ArrowUp wraps to the end of the list.
+    await user.keyboard("{ArrowUp}");
+    expect(screen.getByRole("option", { selected: true })).toHaveTextContent(
+      "Sector 63, Noida, Uttar Pradesh",
+    );
     await user.keyboard("{ArrowDown}");
     await user.keyboard("{Enter}");
 

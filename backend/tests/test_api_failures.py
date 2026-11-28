@@ -128,6 +128,27 @@ def test_api_csp_and_room_size_validation() -> None:
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize(
+    ("field", "invalid"),
+    [
+        ("pm25_concentration_ug_m3", -1),
+        ("duration_minutes", -1),
+        ("breathing_rate_m3_per_hr", 0),
+    ],
+)
+def test_invalid_dose_inputs_return_422(field: str, invalid: float) -> None:
+    payload = {
+        "pm25_concentration_ug_m3": 50.0,
+        "duration_minutes": 30.0,
+        "breathing_rate_m3_per_hr": 1.0,
+    }
+    payload[field] = invalid
+    response = TestClient(routes.app, raise_server_exceptions=False).post(
+        "/api/exposure/dose", json=payload
+    )
+    assert response.status_code == 422
+
+
 def test_location_rate_limit_omits_client_ip_from_logs(
     caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:

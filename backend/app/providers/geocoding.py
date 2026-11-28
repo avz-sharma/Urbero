@@ -7,32 +7,20 @@ and Nominatim APIs with fallbacks to verified Indian metropolitan landmarks.
 import asyncio
 import logging
 import time
-from collections.abc import Callable, Coroutine
-from typing import Any, TypeVar
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 from pydantic import TypeAdapter, ValidationError
 
 from backend.app.planner.schemas import LocationSearchResult, ReverseGeocodeResult
 from backend.app.providers.cache import SupabaseCache
-from backend.app.providers.resilience import ResilientGet, UpstreamUnavailable
+from backend.app.providers.resilience import ResilientGet, UpstreamUnavailable, coalesce
 
 logger = logging.getLogger(__name__)
-T = TypeVar("T")
 SEARCH_RESULTS = TypeAdapter(list[LocationSearchResult])
 SEARCH_LIMIT = 5
 NOMINATIM_HEADERS = {"User-Agent": "Urbero-Urban-Air-Assistant/1.0 (contact@urbero.internal)"}
-
-
-async def coalesce(
-    tasks: dict[str, asyncio.Task[T]], key: str, fetch: Callable[[], Coroutine[Any, Any, T]]
-) -> T:
-    task = tasks.get(key)
-    if task is None:
-        task = asyncio.create_task(fetch())
-        tasks[key] = task
-        task.add_done_callback(lambda completed: tasks.pop(key, None))
-    return await asyncio.shield(task)
 
 
 # Curated Indian localities & cities for fast, offline-resilient matching

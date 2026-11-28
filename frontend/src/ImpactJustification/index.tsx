@@ -33,8 +33,7 @@ export const ImpactJustification: React.FC<ImpactJustificationProps> = ({
   smogEpisodeActive = false,
 }) => {
   const subIndices = aqiData.sub_indices || [];
-  const overallBand = getAQIBand(aqiData.overall_aqi);
-  const AQIIcon = overallBand.icon;
+  const AQIIcon = getAQIBand(aqiData.is_valid ? aqiData.category : "Unknown").icon;
 
   const showHero = variant === "all" || variant === "hero";
   const showDetails = variant === "all" || variant === "details";
@@ -207,7 +206,7 @@ export const ImpactJustification: React.FC<ImpactJustificationProps> = ({
                       <div className="flex justify-between items-baseline pt-0.5">
                         <span
                           className="text-base font-black font-mono tabular-nums"
-                          style={{ color: subBand.light.text }}
+                          style={{ color: subBand.textColor }}
                         >
                           {sub.sub_index}
                         </span>
@@ -222,7 +221,7 @@ export const ImpactJustification: React.FC<ImpactJustificationProps> = ({
                           className="h-full rounded-full transition-all duration-300"
                           style={{
                             width: `${progressWidth}%`,
-                            backgroundColor: subBand.light.text,
+                            backgroundColor: subBand.textColor,
                           }}
                           aria-hidden="true"
                         />

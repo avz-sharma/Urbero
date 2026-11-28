@@ -9,7 +9,11 @@ import {
   AlertCircle,
   Building,
 } from "lucide-react";
-import type { ActiveLocation, LocationSearchResult } from "../api/types";
+import type {
+  ActiveLocation,
+  LocationSearchResult,
+  ReverseGeocodeResult,
+} from "../api/types";
 
 export interface LocationPickerProps {
   activeLocation: ActiveLocation | null;
@@ -55,6 +59,9 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const gpsRequest = useRef<AbortController | null>(null);
+
+  useEffect(() => () => gpsRequest.current?.abort(), []);
 
   // Focus search input when popover opens
   useEffect(() => {
@@ -132,6 +139,14 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
     };
   }, [isOpen]);
 
+  const selectLocation = (location: ActiveLocation) => {
+    gpsRequest.current?.abort();
+    gpsRequest.current = null;
+    setGpsLoading(false);
+    onSelectLocation(location);
+    setIsOpen(false);
+  };
+
   const handleUseMyLocation = () => {
     setGpsError(null);
 
@@ -142,44 +157,35 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
       return;
     }
 
+    const controller = new AbortController();
+    gpsRequest.current?.abort();
+    gpsRequest.current = controller;
     setGpsLoading(true);
 
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
+      async ({ coords }) => {
+        if (controller.signal.aborted) return;
+        const { latitude: lat, longitude: lon } = coords;
+        let label = "Current Location";
 
         try {
-          // Reverse geocode to get human-readable Indian locality/city
           const revRes = await fetch(
             `/api/locations/reverse?lat=${lat.toFixed(2)}&lon=${lon.toFixed(2)}`,
+            { signal: controller.signal },
           );
-          let label = "Current Location";
           if (revRes.ok) {
-            const revData = await revRes.json();
+            const revData: ReverseGeocodeResult = await revRes.json();
             label = revData.label || `${revData.city || "Current Area"}, India`;
           }
-
-          onSelectLocation({
-            label,
-            lat,
-            lon,
-            origin: "gps",
-          });
-          setIsOpen(false);
         } catch {
-          onSelectLocation({
-            label: "GPS Location",
-            lat,
-            lon,
-            origin: "gps",
-          });
-          setIsOpen(false);
-        } finally {
-          setGpsLoading(false);
+          label = "GPS Location";
         }
+        if (!controller.signal.aborted)
+          selectLocation({ label, lat, lon, origin: "gps" });
       },
       (err) => {
+        if (controller.signal.aborted) return;
+        gpsRequest.current = null;
         setGpsLoading(false);
         if (err.code === err.PERMISSION_DENIED) {
           setGpsError(
@@ -198,23 +204,21 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
   };
 
   const handleSelectSearchResult = (item: LocationSearchResult) => {
-    onSelectLocation({
+    selectLocation({
       label: item.label,
       lat: item.lat,
       lon: item.lon,
       origin: "search",
     });
-    setIsOpen(false);
   };
 
   const handleSelectQuickCity = (city: (typeof QUICK_CITIES)[0]) => {
-    onSelectLocation({
+    selectLocation({
       label: `${city.name} (${city.state})`,
       lat: city.lat,
       lon: city.lon,
       origin: "search",
     });
-    setIsOpen(false);
   };
 
   const handleComboboxKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -226,7 +230,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setFocusedIndex(
-        (prev) => (prev - 1 + searchResults.length) % searchResults.length,
+        (prev) => (prev <= 0 ? searchResults.length - 1 : prev - 1),
       );
     } else if (
       e.key === "Enter" &&

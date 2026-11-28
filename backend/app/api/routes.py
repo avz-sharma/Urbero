@@ -106,19 +106,22 @@ async def get_nearest_station_readings(
     )
 
 
-@router.post("/aqi/calculate", response_model=CPCBAQIResult)
+@router.post("/aqi/calculate")
 async def calculate_aqi_endpoint(readings: dict[str, float]) -> CPCBAQIResult:
     """Calculate CPCB AQI from a dictionary of pollutant concentrations."""
     return calculate_cpcb_aqi(readings)
 
 
-@router.post("/exposure/dose", response_model=DoseCalculationResult)
+@router.post("/exposure/dose")
 async def calculate_dose_endpoint(inp: DoseCalculationInput) -> DoseCalculationResult:
     """Calculate personal inhaled PM2.5 dose and cigarette equivalence."""
-    return calculate_inhaled_dose(inp)
+    try:
+        return calculate_inhaled_dose(inp)
+    except ValueError as err:
+        raise HTTPException(status_code=422, detail="Invalid exposure inputs.") from err
 
 
-@router.post("/exposure/cadr", response_model=RoomCADRResult)
+@router.post("/exposure/cadr")
 async def calculate_cadr_endpoint(
     dimensions: RoomDimensions,
     factors: RoomIndoorFactors | None = None,
@@ -128,7 +131,7 @@ async def calculate_cadr_endpoint(
     return calculate_room_cadr(dimensions, factors, target_ach)
 
 
-@router.post("/exposure/commute", response_model=list[CommuteModeComparison])
+@router.post("/exposure/commute")
 async def compare_commute_endpoint(
     distance_km: float = Query(..., gt=0),
     ambient_pm25: float = Query(..., ge=0),
@@ -137,7 +140,7 @@ async def compare_commute_endpoint(
     return compare_commute_modes(distance_km, ambient_pm25)
 
 
-@router.post("/exposure/commute/advice", response_model=TravelAdviceResponse)
+@router.post("/exposure/commute/advice")
 @limiter.limit("20/minute")
 async def advise_commute(request: Request, travel: TravelAdviceRequest) -> TravelAdviceResponse:
     question = sanitize_user_input(travel.question)
@@ -167,7 +170,7 @@ async def advise_commute(request: Request, travel: TravelAdviceRequest) -> Trave
     )
 
 
-@router.post("/exposure/errands", response_model=MergedErrandsResult)
+@router.post("/exposure/errands")
 async def optimize_errands_endpoint(
     stops: list[ErrandStop],
     peak_pm25: float = Query(..., ge=0, le=2000),
@@ -182,11 +185,8 @@ async def optimize_errands_endpoint(
         raise HTTPException(status_code=422, detail=str(err)) from err
 
 
-@router.post(
-    "/plan/daily",
-    response_model=DailyPlanResponse,
-)
-@router.post("/plan", response_model=DailyPlanResponse)
+@router.post("/plan/daily")
+@router.post("/plan")
 @limiter.limit("20/minute")
 async def generate_daily_plan(request: Request, plan_req: DailyPlanRequest) -> DailyPlanResponse:
     readings, pollutants = await _get_pollutants(plan_req.latitude, plan_req.longitude)
@@ -198,7 +198,7 @@ async def generate_daily_plan(request: Request, plan_req: DailyPlanRequest) -> D
         raise HTTPException(status_code=422, detail=str(err)) from err
 
 
-@router.post("/planner/vision", response_model=RoomVisionExtraction)
+@router.post("/planner/vision")
 @limiter.limit("15/minute")
 async def analyze_room_photo_endpoint(
     request: Request,
@@ -225,7 +225,7 @@ async def analyze_room_photo_endpoint(
         ) from err
 
 
-@router.get("/forecast/modelled", response_model=ModelledForecastResponse)
+@router.get("/forecast/modelled")
 @limiter.limit("30/minute")
 async def get_modelled_forecast(
     request: Request,

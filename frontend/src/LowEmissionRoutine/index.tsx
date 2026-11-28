@@ -18,7 +18,7 @@ import type {
 } from "../api/types";
 import { CopyButton } from "../common/CopyButton";
 import { snappySpring } from "../lib/motion";
-import { getModeIcon } from "./commuteIcons";
+import { getCommutePresentation } from "./commutePresentation";
 
 const CommuteBars = lazy(() => import("./CommuteBars"));
 
@@ -139,8 +139,6 @@ export const LowEmissionRoutine: React.FC<LowEmissionRoutineProps> = ({
   hideBriefings = false,
 }) => {
   const [commuteView, setCommuteView] = useState<"table" | "visual">("table");
-
-  // Calculate max values for proportional bar scaling
 
   return (
     <section
@@ -418,13 +416,8 @@ export const LowEmissionRoutine: React.FC<LowEmissionRoutineProps> = ({
             </thead>
             <tbody className="divide-y divide-[var(--border-subtle)] bg-[var(--bg-surface)]">
               {commuteOptions.map((c) => {
-                const isOptimal =
-                  c.mode.toLowerCase() === "metro" ||
-                  c.planet_vs_lungs_note.toLowerCase().includes("win-win");
-                const isConflict =
-                  c.planet_vs_lungs_note.toLowerCase().includes("hazard") ||
-                  c.planet_vs_lungs_note.toLowerCase().includes("conflict");
-                const ModeIcon = getModeIcon(c.mode);
+                const { ModeIcon, isOptimal, isConflict } =
+                  getCommutePresentation(c);
 
                 return (
                   <tr

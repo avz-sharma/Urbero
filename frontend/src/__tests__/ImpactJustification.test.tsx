@@ -121,6 +121,25 @@ describe("ImpactJustification Component", () => {
     expect(screen.getByText("285 µg/m³")).toBeInTheDocument();
   });
 
+  it("shows insufficient pollutant data without the Good AQI shield", () => {
+    render(
+      <ImpactJustification
+        aqiData={{
+          ...MOCK_AQI,
+          overall_aqi: 0,
+          category: "Unknown",
+          is_valid: false,
+        }}
+        stationMetadata={MOCK_STATION}
+        dataConfidence={MOCK_CONFIDENCE}
+        variant="hero"
+      />,
+    );
+
+    const badge = screen.getByText("Insufficient pollutants").parentElement;
+    expect(badge?.querySelector("svg.lucide-circle-alert")).toBeInTheDocument();
+  });
+
   it("renders consolidated errand loop metrics", () => {
     render(
       <ImpactJustification

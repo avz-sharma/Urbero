@@ -7,6 +7,7 @@ past_days=3 returns archived model output. CO is µg/m³; CPCB requires mg/m³.
 import asyncio
 import logging
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
@@ -21,7 +22,7 @@ from backend.app.providers.base import (
     validate_concentration,
 )
 from backend.app.providers.cache import SupabaseCache
-from backend.app.providers.resilience import ResilientGet
+from backend.app.providers.resilience import ResilientGet, coalesce
 
 logger = logging.getLogger(__name__)
 MODEL_SOURCE = "Open-Meteo CAMS (Modelled)"
@@ -29,25 +30,32 @@ IST = timezone(timedelta(hours=5, minutes=30))
 PARAMETERS = {"pm2_5": "PM2.5", "pm10": "PM10", "nitrogen_dioxide": "NO2", "carbon_monoxide": "CO"}
 
 
+@dataclass(frozen=True)
+class _CamsGrid:
+    latitude: float
+    longitude: float
+    hours: list[tuple[datetime, dict[str, float]]]
+
+
 class OpenMeteoProvider:
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client
         self._shared = SupabaseCache()
         self._resilience = ResilientGet()
-        self._cache: dict[tuple[float, float], tuple[float, dict[str, Any]]] = {}
-        self._tasks: dict[tuple[float, float], asyncio.Task[dict[str, Any]]] = {}
+        self._cache: dict[tuple[float, float], tuple[float, _CamsGrid]] = {}
+        self._tasks: dict[tuple[float, float], asyncio.Task[_CamsGrid]] = {}
 
-    async def _fetch(self, lat: float, lon: float) -> dict[str, Any]:
+    async def _fetch(self, lat: float, lon: float) -> _CamsGrid:
         shared_key = f"cams:{lat:.2f}:{lon:.2f}"
         if cached := await self._shared.get_fresh(shared_key):
             expires_at, cached_data = cached
             try:
-                self._validate(cached_data)
+                grid = self._parse(cached_data)
             except (KeyError, ValueError, TypeError):
                 logger.warning("cache_payload_invalid tier=l2 provider=cams")
             else:
-                self._store(lat, lon, expires_at, cached_data)
-                return cached_data
+                self._store(lat, lon, expires_at, grid)
+                return grid
 
         params: dict[str, str | int | float] = {
             "latitude": lat,
@@ -69,33 +77,35 @@ class OpenMeteoProvider:
                 )
         response.raise_for_status()
         data: dict[str, Any] = response.json()
-        self._validate(data)
+        grid = self._parse(data)
         expires_at = time.time() + AIR_QUALITY_CACHE_TTL_SECONDS
-        self._store(lat, lon, expires_at, data)
+        self._store(lat, lon, expires_at, grid)
         await self._shared.set_fresh(shared_key, expires_at, data)
-        return data
+        return grid
 
-    def _validate(self, data: dict[str, Any]) -> None:
-        if not isinstance(data.get("hourly"), dict) or not data["hourly"].get("time"):
+    def _parse(self, data: dict[str, Any]) -> _CamsGrid:
+        if (
+            not isinstance(data, dict)
+            or not isinstance(data.get("hourly"), dict)
+            or not data["hourly"].get("time")
+        ):
             raise ValueError("Open-Meteo hourly data missing")
-        self._hours(data)
+        lat, lon = float(data["latitude"]), float(data["longitude"])
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise ValueError("Invalid CAMS grid coordinates")
+        return _CamsGrid(lat, lon, self._hours(data))
 
-    def _store(self, lat: float, lon: float, expires_at: float, data: dict[str, Any]) -> None:
-        self._cache[(lat, lon)] = (expires_at, data)
+    def _store(self, lat: float, lon: float, expires_at: float, grid: _CamsGrid) -> None:
+        self._cache[(lat, lon)] = (expires_at, grid)
         if len(self._cache) > 512:
             self._cache.pop(next(iter(self._cache)))
 
-    async def get_data(self, lat: float, lon: float) -> dict[str, Any]:
+    async def _get_grid(self, lat: float, lon: float) -> _CamsGrid:
         key = (round(lat, 2), round(lon, 2))
         cached = self._cache.get(key)
         if cached and time.time() < cached[0]:
             return cached[1]
-        task = self._tasks.get(key)
-        if task is None:
-            task = asyncio.create_task(self._fetch(*key))
-            self._tasks[key] = task
-            task.add_done_callback(lambda done: self._tasks.pop(key, None))
-        return await asyncio.shield(task)
+        return await coalesce(self._tasks, key, lambda: self._fetch(*key))
 
     def _hours(self, data: dict[str, Any]) -> list[tuple[datetime, dict[str, float]]]:
         hourly = data["hourly"]
@@ -118,17 +128,17 @@ class OpenMeteoProvider:
         return rows
 
     async def get_latest_readings(self, lat: float, lon: float) -> list[SensorReading]:
-        data = await self.get_data(lat, lon)
+        grid = await self._get_grid(lat, lon)
         now = datetime.now(UTC)
         rows = [
             (t, v)
-            for t, v in self._hours(data)
+            for t, v in grid.hours
             if timedelta(0) <= now - t <= timedelta(hours=3) and "PM2.5" in v and len(v) >= 3
         ]
         if not rows:
             raise ValueError("No current usable CAMS data")
         observed, values = max(rows, key=lambda row: row[0])
-        grid_lat, grid_lon = float(data["latitude"]), float(data["longitude"])
+        distance = calculate_haversine_distance_km(lat, lon, grid.latitude, grid.longitude)
         return [
             SensorReading(
                 parameter=p,
@@ -139,9 +149,9 @@ class OpenMeteoProvider:
                 source=MODEL_SOURCE,
                 station="CAMS global model grid (not a station)",
                 status="modelled_live",
-                distance_km=calculate_haversine_distance_km(lat, lon, grid_lat, grid_lon),
-                station_latitude=grid_lat,
-                station_longitude=grid_lon,
+                distance_km=distance,
+                station_latitude=grid.latitude,
+                station_longitude=grid.longitude,
                 conversion_note="Hourly CAMS model output, not measured station data or certified CPCB averaging. CO µg/m³ ÷ 1000 → mg/m³. Open-Meteo and Copernicus CAMS attribution: https://open-meteo.com/en/docs/air-quality-api",
             )
             for p, v in values.items()
@@ -151,12 +161,12 @@ class OpenMeteoProvider:
         now = datetime.now(UTC)
         return [
             HourlyMeasurement(observed_at=t.astimezone(IST), value=v["PM2.5"])
-            for t, v in self._hours(await self.get_data(lat, lon))
+            for t, v in (await self._get_grid(lat, lon)).hours
             if timedelta(0) <= now - t <= timedelta(hours=72) and "PM2.5" in v
         ]
 
     async def fetch_forecast(self, latitude: float, longitude: float) -> ModelledForecastResponse:
-        data = await self.get_data(latitude, longitude)
+        grid = await self._get_grid(latitude, longitude)
         now = datetime.now(UTC)
         forecasts = [
             ModelledPollutantHour(
@@ -166,7 +176,7 @@ class OpenMeteoProvider:
                 no2_ug_m3=v.get("NO2"),
                 co_ug_m3=v["CO"] * 1000 if "CO" in v else None,
             )
-            for t, v in self._hours(data)
+            for t, v in grid.hours
             if t >= now and "PM2.5" in v and "PM10" in v
         ][:48]
         if not forecasts:

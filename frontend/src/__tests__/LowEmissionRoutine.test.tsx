@@ -112,7 +112,8 @@ describe("LowEmissionRoutine Component", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("renders Planet vs. Lungs commute mode comparison table", () => {
+  it("shows consistent trade-off labels in the comparison table and bars", async () => {
+    const user = userEvent.setup();
     render(
       <LowEmissionRoutine
         commuteOptions={MOCK_COMMUTE}
@@ -126,6 +127,13 @@ describe("LowEmissionRoutine Component", () => {
     expect(screen.getByText("Delhi Metro (Blue Line)")).toBeInTheDocument();
     expect(screen.getByText("Bicycle (Arterial Highway)")).toBeInTheDocument();
     expect(screen.getByText(/Planet vs Lungs Hazard/i)).toBeInTheDocument();
+    expect(screen.getByText("Optimal Win-Win")).toBeInTheDocument();
+    expect(screen.getByText("Planet vs. Lungs Conflict")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Visual Bars" }));
+    expect(await screen.findAllByText("Inhaled PM₂.₅ Dose")).toHaveLength(2);
+    expect(screen.getAllByText("Optimal Win-Win")).toHaveLength(2);
+    expect(screen.getAllByText("Planet vs. Lungs Conflict")).toHaveLength(2);
   });
 
   it("allows switching between WhatsApp and Community Brief tabs and copying", async () => {

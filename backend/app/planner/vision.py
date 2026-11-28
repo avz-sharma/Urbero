@@ -18,7 +18,7 @@ from backend.app.planner.schemas import RoomVisionExtraction
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_MIME_TYPES: set[str] = {"image/jpeg", "image/png", "image/webp"}
+IMAGE_FORMATS = {"image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WEBP"}
 MAX_IMAGE_BYTES: int = 5 * 1024 * 1024  # 5 MB
 
 
@@ -31,30 +31,23 @@ def validate_and_strip_exif(image_bytes: bytes, content_type: str) -> bytes:
     if len(image_bytes) > MAX_IMAGE_BYTES:
         raise ValueError("Image file exceeds 5MB limit.")
 
-    normalized_mime = content_type.lower().strip()
-    if normalized_mime not in ALLOWED_MIME_TYPES:
+    image_format = IMAGE_FORMATS.get(content_type.lower().strip())
+    if image_format is None:
         raise ValueError(
-            f"Unsupported image MIME type: '{content_type}'. Allowed types: {', '.join(sorted(ALLOWED_MIME_TYPES))}."
+            f"Unsupported image MIME type: '{content_type}'. Allowed types: {', '.join(IMAGE_FORMATS)}."
         )
 
     try:
-        with Image.open(io.BytesIO(image_bytes)) as img:
+        with Image.open(io.BytesIO(image_bytes), formats=[image_format]) as img:
             img.verify()
-    except Exception as e:
-        raise ValueError("Invalid or corrupted image data.") from e
 
-    # Re-open after verify() to strip EXIF and re-encode clean in-memory
-    with Image.open(io.BytesIO(image_bytes)) as img:
-        img_format = "PNG" if img.format == "PNG" else "JPEG"
-        # Convert RGBA to RGB for JPEG compatibility
-        if img_format == "JPEG" and img.mode in ("RGBA", "P"):
-            clean_img = img.convert("RGB")
-        else:
-            clean_img = img.copy()
-
-        output_stream = io.BytesIO()
-        clean_img.save(output_stream, format=img_format)
-        return output_stream.getvalue()
+        # Pillow requires reopening after verify() before reading the pixels.
+        with Image.open(io.BytesIO(image_bytes), formats=[image_format]) as img:
+            output = io.BytesIO()
+            img.save(output, format=image_format, exif=b"")
+            return output.getvalue()
+    except (OSError, SyntaxError, ValueError, Image.DecompressionBombError) as err:
+        raise ValueError("Invalid or corrupted image data.") from err
 
 
 def analyze_room_photo(
@@ -66,6 +59,7 @@ def analyze_room_photo(
 
     Treats all image text as untrusted (prompt-injection defense).
     """
+    content_type = content_type.lower().strip()
     clean_bytes = validate_and_strip_exif(image_bytes, content_type)
 
     prompt = (

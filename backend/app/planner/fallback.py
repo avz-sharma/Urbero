@@ -41,6 +41,7 @@ def generate_deterministic_fallback(
     is_smog = routine.smog_episode_active
     aqi_cat = aqi.category
     aqi_val = str(aqi.overall_aqi) if aqi.is_valid else "unavailable (insufficient pollutants)"
+    badge = f"AQI {aqi_val} | {aqi_cat} ({station.station})"
 
     lower_exposure = min(commute_options, key=lambda option: option.personal_inhaled_pm25_ug)
     public_transit = next((option for option in commute_options if option.mode == "metro"), None)
@@ -49,7 +50,6 @@ def generate_deterministic_fallback(
     # 1. WhatsApp Family Card
     if language == "hinglish":
         headline = f"🌅 Urbero Air Alert ({city}) — AQI {aqi_val} ({aqi_cat})"
-        badge = f"AQI {aqi_val} | {aqi_cat} ({station.station})"
         commute_tip = (
             f"Commute Tip: Road pe bike/walk se bachiye. Agar available ho, {lower_exposure.label} consider karein."
             if is_smog
@@ -67,7 +67,6 @@ def generate_deterministic_fallback(
         ]
     else:
         headline = f"🌅 Urbero Daily Family Air Briefing ({city})"
-        badge = f"AQI {aqi_val} | {aqi_cat} ({station.station})"
         commute_tip = (
             f"Commute: Avoid active roadside travel in severe smog. Consider {lower_exposure.label} if available for your trip."
             if is_smog

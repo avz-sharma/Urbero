@@ -42,3 +42,11 @@ def test_commute_invalid_inputs_raise() -> None:
 
     with pytest.raises(ValueError, match="Ambient PM2.5 cannot be negative"):
         compare_commute_modes(distance_km=10.0, ambient_pm25_ug_m3=-20.0)
+
+
+def test_metro_note_reports_its_calculated_trip_estimates() -> None:
+    [metro] = compare_commute_modes(12, 220, target_modes=["metro"])
+
+    assert f"{metro.personal_inhaled_pm25_ug} µg" in metro.planet_vs_lungs_note
+    assert f"{metro.tailpipe_co2_grams} g CO2" in metro.planet_vs_lungs_note
+    assert "grid electricity" in metro.planet_vs_lungs_note

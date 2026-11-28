@@ -88,7 +88,6 @@ export const App = ({ initialView = "landing" }: AppProps) => {
       ...(selectedPreset && {
         room_dimensions: selectedPreset.room_dimensions,
         indoor_factors: selectedPreset.indoor_factors,
-        commute_distance_km: selectedPreset.commute_distance_km,
       }),
     };
     void (async () => {

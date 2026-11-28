@@ -113,8 +113,8 @@ def compare_commute_modes(
         # Trade-off narrative synthesis
         if mode == "metro":
             trade_off = (
-                "Optimal Win-Win: Enclosed air filtration cuts inhaled PM2.5 by ~75% while high-capacity "
-                "electric transit produces 85% lower emissions than private cars."
+                f"Optimal Win-Win: Estimated {inhaled_ug} µg inhaled PM2.5 and "
+                f"{co2_total} g CO2 from grid electricity for this trip."
             )
         elif mode in {"cycling", "walking"}:
             if ambient_pm25_ug_m3 > 120.0:  # Very Poor / Severe

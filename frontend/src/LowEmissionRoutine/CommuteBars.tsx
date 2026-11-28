@@ -1,5 +1,5 @@
 import type { CommuteModeComparison } from "../api/types";
-import { getModeIcon } from "./commuteIcons";
+import { getCommutePresentation } from "./commutePresentation";
 
 export default function CommuteBars({
   commuteOptions,
@@ -18,13 +18,7 @@ export default function CommuteBars({
   return (
     <div className="space-y-3">
       {commuteOptions.map((c) => {
-        const isOptimal =
-          c.mode.toLowerCase() === "metro" ||
-          c.planet_vs_lungs_note.toLowerCase().includes("win-win");
-        const isConflict =
-          c.planet_vs_lungs_note.toLowerCase().includes("hazard") ||
-          c.planet_vs_lungs_note.toLowerCase().includes("conflict");
-        const ModeIcon = getModeIcon(c.mode);
+        const { ModeIcon, isOptimal, isConflict } = getCommutePresentation(c);
         const co2Percent = Math.round((c.tailpipe_co2_grams / maxCO2) * 100);
         const pm25Percent = Math.round(
           (c.personal_inhaled_pm25_ug / maxPM25) * 100,

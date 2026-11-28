@@ -129,11 +129,14 @@ async def test_geocoding_outage_has_no_invented_search_results(
 @pytest.mark.asyncio
 async def test_concurrent_location_search_uses_one_upstream_call(monkeypatch: pytest.MonkeyPatch):
     calls = 0
+    started = asyncio.Event()
+    release = asyncio.Event()
 
     async def respond(request):
         nonlocal calls
         calls += 1
-        await asyncio.sleep(0)
+        started.set()
+        await release.wait()
         return httpx.Response(
             200,
             json={
@@ -145,10 +148,17 @@ async def test_concurrent_location_search_uses_one_upstream_call(monkeypatch: py
 
     transport_client(monkeypatch, respond)
     provider = GeocodingProvider()
-    first, second = await asyncio.gather(
-        provider.search_locations("Pune"), provider.search_locations(" pune ")
-    )
-    assert first == second
+    first = asyncio.create_task(provider.search_locations("Pune"))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    second = asyncio.create_task(provider.search_locations(" pune "))
+    await asyncio.sleep(0)
+    first.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    release.set()
+    results = await asyncio.wait_for(second, timeout=1)
+    assert [item.city for item in results] == ["Pune"]
+    assert await provider.search_locations("Pune") == results
     assert calls == 1
 
 
